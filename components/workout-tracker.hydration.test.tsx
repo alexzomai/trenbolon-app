@@ -67,13 +67,13 @@ describe("server rendering", () => {
 
     const text = renderToText()
 
-    expect(text).toContain("День 1 — Pull")
+    expect(text).toContain("Спина")
     expect(text).toContain("0 / 19")
     expect(text).toContain("01:30")
     expect(text).toContain("Готов к старту")
     // The saved session must not leak into the prerendered markup.
-    expect(text).not.toContain("День 2 — Push")
     expect(text).not.toContain("1 / 18")
+    expect(text).not.toContain("Идёт отдых")
   })
 
   it("does not warn about missing storage in the prerendered markup", () => {
@@ -115,7 +115,7 @@ describe("hydration", () => {
     vi.setSystemTime(T0 + 30_000)
     const root = await hydrate()
 
-    expect(root.textContent).toContain("День 2 — Push")
+    expect(root.textContent).toContain("Грудь")
     expect(root.textContent).toContain("1 / 18")
     expect(root.textContent).toContain("6%")
     expect(root.textContent).toContain("Идёт отдых")
@@ -128,7 +128,7 @@ describe("hydration", () => {
   it("leaves a fresh workout alone and writes nothing", async () => {
     const root = await hydrate()
 
-    expect(root.textContent).toContain("День 1 — Pull")
+    expect(root.textContent).toContain("Спина")
     expect(root.textContent).toContain("0 / 19")
     expect(root.textContent).toContain("Готов к старту")
     expect(window.localStorage.getItem(STORAGE_KEY)).toBeNull()

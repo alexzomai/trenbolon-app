@@ -1,6 +1,6 @@
 /**
  * Static workout plans — a local snapshot of the Obsidian note
- * "План тренировок.md" (Push / Pull / Legs). Nothing here is fetched or synced
+ * "План тренировок.md" (Спина / Грудь / Ноги). Nothing here is fetched or synced
  * at runtime; editing this file is how the plan changes.
  *
  * The plan itself never changes while the app runs. Only the per-exercise
@@ -33,7 +33,7 @@ export interface Workout {
   id: WorkoutId
   /** Short label for the selector. */
   label: string
-  /** Day heading, e.g. "День 1 — Pull". */
+  /** Heading of the day, e.g. "Спина". */
   title: string
   /** Muscle groups of the day. */
   description: string
@@ -41,12 +41,12 @@ export interface Workout {
 }
 
 export const ROTATION_NOTE =
-  "Через день по кругу: Pull → Push → Legs → Pull → Push → Legs…"
+  "Через день по кругу: Спина → Грудь → Ноги → Спина → Грудь → Ноги…"
 
 const PULL: Workout = {
   id: "pull",
-  label: "Pull",
-  title: "День 1 — Pull",
+  label: "Спина",
+  title: "Спина",
   description: "спина, бицепс, задние дельты",
   exercises: [
     {
@@ -94,8 +94,8 @@ const PULL: Workout = {
 
 const PUSH: Workout = {
   id: "push",
-  label: "Push",
-  title: "День 2 — Push",
+  label: "Грудь",
+  title: "Грудь",
   description: "грудь, плечи, трицепс",
   exercises: [
     { id: "bench-press", name: "Жим лёжа", sets: 3, reps: "8–10", weight: "10–13" },
@@ -137,8 +137,8 @@ const PUSH: Workout = {
 
 const LEGS: Workout = {
   id: "legs",
-  label: "Legs + пресс",
-  title: "День 3 — Legs + пресс",
+  label: "Ноги",
+  title: "Ноги",
   description: "ноги и пресс",
   exercises: [
     {

@@ -17,9 +17,9 @@ describe("plan shape", () => {
     expect(WORKOUT_IDS).toEqual(["pull", "push", "legs"])
     expect(DEFAULT_WORKOUT_ID).toBe("pull")
     expect(WORKOUT_IDS.map((id) => WORKOUTS[id].label)).toEqual([
-      "Pull",
-      "Push",
-      "Legs + пресс",
+      "Спина",
+      "Грудь",
+      "Ноги",
     ])
   })
 
@@ -41,16 +41,16 @@ describe("plan shape", () => {
   })
 
   it("names the day and the muscle groups of each workout", () => {
-    expect(getWorkout("pull").title).toBe("День 1 — Pull")
+    expect(getWorkout("pull").title).toBe("Спина")
     expect(getWorkout("pull").description).toBe("спина, бицепс, задние дельты")
-    expect(getWorkout("push").title).toBe("День 2 — Push")
+    expect(getWorkout("push").title).toBe("Грудь")
     expect(getWorkout("push").description).toBe("грудь, плечи, трицепс")
-    expect(getWorkout("legs").title).toBe("День 3 — Legs + пресс")
+    expect(getWorkout("legs").title).toBe("Ноги")
     expect(getWorkout("legs").description).toBe("ноги и пресс")
   })
 
   it("carries the rotation note from the source plan", () => {
-    expect(ROTATION_NOTE).toBe("Через день по кругу: Pull → Push → Legs → Pull → Push → Legs…")
+    expect(ROTATION_NOTE).toBe("Через день по кругу: Спина → Грудь → Ноги → Спина → Грудь → Ноги…")
   })
 
   it("keeps the rest presets and validates workout ids", () => {

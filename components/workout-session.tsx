@@ -7,9 +7,10 @@ import { ExerciseCard } from "@/components/exercise-card"
 import { RestTimer } from "@/components/rest-timer"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
+import { WorkoutInfo } from "@/components/workout-info"
 import { WorkoutSelector } from "@/components/workout-selector"
 import { isAudioSupported, playBeep, unlockAudio } from "@/lib/beep"
-import { ROTATION_NOTE, type WorkoutId } from "@/lib/workout-plan"
+import { type WorkoutId } from "@/lib/workout-plan"
 import {
   buildResultsText,
   countCompleted,
@@ -195,23 +196,29 @@ export function WorkoutSession({ hydrated }: WorkoutSessionProps) {
   const percent = progressPercent(state)
   const complete = isWorkoutComplete(state)
   const remaining = selectRemainingMs(state.timer, now)
+  // Marks parked beyond the chosen set count: explained in the ⓘ panel, since
+  // the cards no longer carry prose.
+  const hiddenMarks = workout.exercises
+    .map((exercise) => ({
+      id: exercise.id,
+      name: exercise.name,
+      count: hiddenCompletedFor(state, exercise),
+    }))
+    .filter((entry) => entry.count > 0)
 
   return (
     <main className="mx-auto w-full max-w-[760px] px-4 py-8 sm:py-10">
       <header className="flex flex-col gap-3">
         <WorkoutSelector selected={state.workoutId} onSelect={handleSelectWorkout} />
 
-        <h1 className="flex items-center gap-2 text-xl font-bold sm:text-2xl">
-          <Dumbbell aria-hidden="true" className="size-5 shrink-0" />
-          {workout.title}
-        </h1>
-        <p className="text-[0.95rem] leading-relaxed text-muted-foreground">
-          {workout.description}. {ROTATION_NOTE}
-        </p>
-        <p className="text-[0.95rem] leading-relaxed text-muted-foreground">
-          Отмечай каждый выполненный подход. Прогресс пересчитывается автоматически. Вес и
-          количество повторений можно менять прямо во время тренировки.
-        </p>
+        {/* The ⓘ button holds every explanation the page used to spell out. */}
+        <div className="flex items-start justify-between gap-3">
+          <h1 className="flex items-center gap-2 text-xl font-bold sm:text-2xl">
+            <Dumbbell aria-hidden="true" className="size-5 shrink-0" />
+            {workout.title}
+          </h1>
+          <WorkoutInfo workout={workout} hiddenMarks={hiddenMarks} />
+        </div>
       </header>
 
       <section aria-label="Общий прогресс" className="mt-7 flex flex-col gap-2">
@@ -263,7 +270,6 @@ export function WorkoutSession({ hydrated }: WorkoutSessionProps) {
               index={index}
               sets={setsFor(state, exercise)}
               marks={state.completed[exercise.id]}
-              hiddenDone={hiddenCompletedFor(state, exercise)}
               weight={state.weights[exercise.id]}
               reps={state.reps[exercise.id]}
               onToggleSet={(setIndex) => handleToggleSet(exercise.id, setIndex)}
@@ -312,28 +318,16 @@ export function WorkoutSession({ hydrated }: WorkoutSessionProps) {
         )}
       </p>
 
-      <footer className="mt-6 flex flex-col gap-2 text-sm leading-relaxed text-muted-foreground">
-        <p>
-          Таймер запускается автоматически после каждого отмеченного подхода, кроме
-          последнего. «Начать заново» сбрасывает текущую тренировку.
-        </p>
-        <p>
-          Смена тренировки начинает выбранный день с нуля — прогресс, веса, повторения,
-          таймер и настройки сбрасываются после подтверждения. Браузер хранит только одну,
-          текущую тренировку.
-        </p>
-        <p>
-          Данные хранятся только в этом браузере, на сервер ничего не отправляется. Если
-          очистить данные браузера, прогресс и настройки будут удалены. Звуковой сигнал
-          работает, пока страница открыта.
-        </p>
-        {!storageAvailable && (
+      {/* Actionable, so it stays on the page rather than hiding in the ⓘ panel. */}
+      {!storageAvailable && (
+        <footer className="mt-6 text-sm leading-relaxed">
           <p className="text-destructive">
             Браузер запретил локальное хранилище — прогресс не сохранится после перезагрузки
             страницы.
           </p>
-        )}
-      </footer>
+        </footer>
+      )}
+
     </main>
   )
 }

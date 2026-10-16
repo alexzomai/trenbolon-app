@@ -1,4 +1,4 @@
-# Тренировки Pull / Push / Legs — workout tracker
+# Тренировки Спина / Грудь / Ноги — workout tracker
 
 A single-page Russian workout tracker: pick one of three training days, mark off
 each completed set, edit weights and reps on the fly, and let a rest timer run
@@ -15,15 +15,15 @@ components on Radix primitives.
 ### The plans
 
 Three workouts, six exercises each, rotated every other day:
-**Pull → Push → Legs → Pull → …** Pull totals 19 sets, Push 18 (17 if the
-butterfly is set to two) and Legs 18.
+**Спина → Грудь → Ноги → Спина → …** The back day totals 19 sets, the chest day
+18 (17 if the butterfly is set to two) and the legs day 18.
 
 The plans are a **static local snapshot** of the Obsidian note
 «План тренировок.md», transcribed into `lib/workout-plan.ts`. There is no live
 sync: the app never talks to Obsidian, holds no vault credentials and makes no
 network requests at runtime. Changing the plan means editing that file.
 
-#### День 1 — Pull (спина, бицепс, задние дельты)
+#### Спина (спина, бицепс, задние дельты)
 
 | # | Exercise | Sets × reps | Weight, kg | Hint |
 |---|----------|-------------|------------|------|
@@ -34,7 +34,7 @@ network requests at runtime. Changing the plan means editing that file.
 | 5 | Шраги со штангой/гантелями | 3 × 12 | — | |
 | 6 | Бицепс стоя | 3 × 10 | 10 | слегка согнутые колени, руки прямые, чуть выведены вперёд; гантели |
 
-#### День 2 — Push (грудь, плечи, трицепс)
+#### Грудь (грудь, плечи, трицепс)
 
 | # | Exercise | Sets × reps | Weight, kg | Hint |
 |---|----------|-------------|------------|------|
@@ -45,7 +45,7 @@ network requests at runtime. Changing the plan means editing that file.
 | 5 | Бабочка | **2–3** × 10–12 | 42–45 | по плану 2–3 подхода |
 | 6 | Трицепс на «бычьих яйцах» | 3 × до отказа | 20 | начинать с 20 кг, понижать по 5 кг |
 
-#### День 3 — Legs + пресс (ноги и пресс)
+#### Ноги (ноги и пресс)
 
 | # | Exercise | Sets × reps | Weight | Hint |
 |---|----------|-------------|--------|------|
@@ -59,14 +59,17 @@ network requests at runtime. Changing the plan means editing that file.
 Weight and reps are free-form text, so ranges (`8–12`), single numbers, empty
 values and words (`до отказа`, `свой вес`) are all valid. Where the source
 prescribes no weight the field stays empty rather than inventing one. Technique,
-alternatives and drop-set instructions are shown as hints under the exercise
-title instead of bloating the heading.
+alternatives and drop-set instructions live in the ⓘ panel (see below) rather
+than on the cards.
 
 ### Choosing a workout — switching resets everything
 
-The selector sits at the top as a three-choice radio group (`Pull`,
-`Push`, `Legs + пресс`) and the heading below it names the day and its muscle
-groups, with the rotation note.
+The selector sits at the top as a three-choice radio group (`Спина`, `Грудь`,
+`Ноги`) and the heading below it names the day. The muscle groups and the
+rotation note moved into the ⓘ panel.
+
+Internally the workouts keep their original ids (`pull`, `push`, `legs`), so a
+saved session survives the renaming.
 
 There is only **one session at a time**. Picking another workout therefore
 **discards the current one**, which is why it is confirmed first:
@@ -88,11 +91,22 @@ There is only **one session at a time**. Picking another workout therefore
 The butterfly is prescribed as `2–3 × 10–12`. It defaults to **3** and carries a
 small 2/3 radio group, labelled `Подходов`. The chosen count is what the card,
 the total, the progress bar, the completion notice and the copied summary all
-use (Push is 18 sets at three, 17 at two).
+use (the chest day is 18 sets at three, 17 at two).
 
-Lowering the count does not delete the third mark: it is parked, the card says
-so (`Отмечено подходов сверх выбранных: 1`), and raising the count back to three
-counts it again.
+Lowering the count does not delete the third mark: it is parked, the ⓘ panel
+says so (`Бабочка: отмечено подходов сверх выбранных — 1`), and raising the
+count back to three counts it again.
+
+### The ⓘ panel
+
+Every explanation — muscle groups, rotation, how to mark sets, the timer,
+persistence, reset and switching, the planned set ranges with any parked marks,
+and the per-exercise technique hints — lives in a single modal opened by the
+44 × 44 ⓘ button beside the heading (`Информация о тренировке`). It reflects the
+selected workout, scrolls inside a `80dvh` cap, closes on `Закрыть`, Escape or
+the overlay with focus returned to the button, and touches neither state,
+storage nor the running timer. The page itself keeps only controls, numbers,
+transient notices and the actionable storage warning.
 
 ### Progress
 
@@ -158,7 +172,7 @@ throws the session away by design.
 * **Versioned schema.** The record carries a `version` (currently `2`); anything
   from another version is ignored. Version 1 held the single hard-coded
   chest/shoulders plan with no workout id — such a record is simply dropped and
-  the tracker starts fresh on Pull, rather than being migrated.
+  the tracker starts fresh on the back day, rather than being migrated.
 * **Validated on read.** Malformed JSON, wrong types, an unknown workout id, a
   set array whose length no longer matches the plan, a running timer with no
   deadline — any of these falls back to a fresh workout instead of crashing. The
@@ -168,7 +182,7 @@ throws the session away by design.
   caught; the app keeps working and the footer says progress will not survive a
   reload.
 * **Hydration-safe.** The page is statically prerendered, so the server and the
-  first client render both produce the default Pull workout. `useIsHydrated()`
+  first client render both produce the default back workout (`pull`). `useIsHydrated()`
   (a `useSyncExternalStore` with a differing server snapshot) re-keys the session
   the moment the client takes over, and that instance reads storage in its
   reducer initializer. No state is patched in from an effect, and the
@@ -192,7 +206,7 @@ throws the session away by design.
 * Everything is reachable and operable by keyboard with visible focus rings.
 * Max content width 760 px, centred. Mobile-first with 16 px margins: no
   horizontal overflow at 360 px. Set buttons are 44 px tall and never shrink —
-  three fit on one row, and the four of the first Pull exercise wrap into two
+  three fit on one row, and the four of the first exercise of the back day wrap into two
   rows of two (four across from `sm` upwards).
 * Pure black background, system font stack only — no fonts are fetched over the
   network.

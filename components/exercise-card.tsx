@@ -8,7 +8,6 @@ import {
   Card,
   CardAction,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
@@ -25,8 +24,6 @@ interface ExerciseCardProps {
   sets: number
   /** One mark per slot; only the first `sets` of them count. */
   marks: boolean[]
-  /** Marks parked beyond `sets`, kept so raising the count restores them. */
-  hiddenDone: number
   weight: string
   reps: string
   onToggleSet: (setIndex: number) => void
@@ -50,7 +47,6 @@ export function ExerciseCard({
   index,
   sets,
   marks,
-  hiddenDone,
   weight,
   reps,
   onToggleSet,
@@ -67,11 +63,8 @@ export function ExerciseCard({
   const done = visible.filter(Boolean).length
   const title = `${index + 1}. ${exercise.name}`
 
+  // Technique hints and the planned set range live in the ⓘ panel instead.
   const options = exercise.setOptions
-  const notes = [
-    exercise.hint,
-    options && `по плану ${options[0]}–${options[options.length - 1]} подхода`,
-  ].filter(Boolean)
 
   return (
     <Card
@@ -90,11 +83,6 @@ export function ExerciseCard({
             {done}/{sets}
           </span>
         </CardAction>
-        {notes.length > 0 && (
-          <CardDescription className="text-xs leading-snug">
-            {notes.join(" · ")}
-          </CardDescription>
-        )}
       </CardHeader>
 
       <CardContent className="flex flex-col gap-3">
@@ -185,13 +173,6 @@ export function ExerciseCard({
             </Button>
           ))}
         </div>
-
-        {hiddenDone > 0 && (
-          <p className="text-xs leading-snug text-muted-foreground">
-            Отмечено подходов сверх выбранных: {hiddenDone}. Отметки сохранены и снова
-            зачтутся, если вернуть большее число подходов.
-          </p>
-        )}
       </CardContent>
     </Card>
   )

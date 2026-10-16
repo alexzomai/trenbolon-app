@@ -58,6 +58,16 @@ function switchTo(name: string) {
   )
 }
 
+/** Open the ⓘ panel and return its dialog element. */
+function openInfo(): HTMLElement {
+  fireEvent.click(screen.getByRole("button", { name: "Информация о тренировке" }))
+  return screen.getByRole("dialog")
+}
+
+function closeInfo() {
+  fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Закрыть" }))
+}
+
 function seedStorage(state: WorkoutState) {
   window.localStorage.setItem(STORAGE_KEY, serializeState(state))
 }
@@ -97,9 +107,8 @@ describe("rendering the plan", () => {
     render(<WorkoutTracker />)
 
     expect(
-      screen.getByRole("heading", { level: 1, name: /День 1 — Pull/ })
+      screen.getByRole("heading", { level: 1, name: /Спина/ })
     ).toBeInTheDocument()
-    expect(screen.getByText(/спина, бицепс, задние дельты/)).toBeInTheDocument()
 
     for (const [index, exercise] of PULL.exercises.entries()) {
       expect(
@@ -116,15 +125,20 @@ describe("rendering the plan", () => {
     render(<WorkoutTracker />)
 
     expect(screen.getByRole("radiogroup", { name: "Тренировка" })).toBeInTheDocument()
-    expect(workoutChoice("Pull")).toHaveAttribute("aria-checked", "true")
-    expect(workoutChoice("Push")).toHaveAttribute("aria-checked", "false")
-    expect(workoutChoice("Legs + пресс")).toHaveAttribute("aria-checked", "false")
+    expect(workoutChoice("Спина")).toHaveAttribute("aria-checked", "true")
+    expect(workoutChoice("Грудь")).toHaveAttribute("aria-checked", "false")
+    expect(workoutChoice("Ноги")).toHaveAttribute("aria-checked", "false")
   })
 
-  it("states the rotation", () => {
+  it("states the rotation in the info dialog, not on the page", () => {
     render(<WorkoutTracker />)
     expect(
-      screen.getByText(/Через день по кругу: Pull → Push → Legs/)
+      screen.queryByText(/Через день по кругу: Спина → Грудь → Ноги/)
+    ).not.toBeInTheDocument()
+
+    const dialog = openInfo()
+    expect(
+      within(dialog).getByText(/Через день по кругу: Спина → Грудь → Ноги/)
     ).toBeInTheDocument()
   })
 
@@ -136,12 +150,16 @@ describe("rendering the plan", () => {
     expect(within(first).getByText("4 × 8–12")).toBeInTheDocument()
   })
 
-  it("moves parenthetical technique notes into hints instead of the title", () => {
+  it("keeps technique notes out of the card title and inside the info dialog", () => {
     render(<WorkoutTracker />)
     const second = screen.getAllByRole("listitem")[1]
 
     expect(within(second).getByText("2. Горизонтальная тяга")).toBeInTheDocument()
-    expect(within(second).getByText("блок сидя, к животу")).toBeInTheDocument()
+    expect(within(second).queryByText(/блок сидя, к животу/)).not.toBeInTheDocument()
+
+    expect(
+      within(openInfo()).getByText(/Горизонтальная тяга: блок сидя, к животу/)
+    ).toBeInTheDocument()
   })
 
   it("seeds the editable weight and reps fields from the plan", () => {
@@ -154,7 +172,7 @@ describe("rendering the plan", () => {
 
   it("keeps free-text reps and bodyweight of the Legs day", () => {
     render(<WorkoutTracker />)
-    switchTo("Legs + пресс")
+    switchTo("Ноги")
 
     expect(screen.getByLabelText(/Вес в кг, Пресс на наклонной скамье/)).toHaveValue("свой вес")
     expect(
@@ -182,7 +200,7 @@ describe("switching workout", () => {
     render(<WorkoutTracker />)
     markSet(1, 1)
 
-    requestSwitch("Push")
+    requestSwitch("Грудь")
 
     const dialog = screen.getByRole("alertdialog")
     expect(within(dialog).getByText(SWITCH_WARNING)).toBeInTheDocument()
@@ -196,7 +214,7 @@ describe("switching workout", () => {
 
     // Still the Pull day, untouched, while the question is open. The page
     // behind a modal is aria-hidden, so these are text rather than role queries.
-    expect(screen.getByText(/День 1 — Pull/)).toBeInTheDocument()
+    expect(screen.getAllByText(/Спина/).length).toBeGreaterThan(0)
     expect(screen.getByText("1 / 19")).toBeInTheDocument()
   })
 
@@ -208,15 +226,15 @@ describe("switching workout", () => {
       vi.advanceTimersByTime(20_000)
     })
 
-    requestSwitch("Push")
+    requestSwitch("Грудь")
     fireEvent.click(
       within(screen.getByRole("alertdialog")).getByRole("button", { name: "Отмена" })
     )
 
     expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument()
-    expect(screen.getByRole("heading", { level: 1, name: /День 1 — Pull/ })).toBeInTheDocument()
-    expect(workoutChoice("Pull")).toHaveAttribute("aria-checked", "true")
-    expect(workoutChoice("Push")).toHaveAttribute("aria-checked", "false")
+    expect(screen.getByRole("heading", { level: 1, name: /Спина/ })).toBeInTheDocument()
+    expect(workoutChoice("Спина")).toHaveAttribute("aria-checked", "true")
+    expect(workoutChoice("Грудь")).toHaveAttribute("aria-checked", "false")
     expect(screen.getByText("1 / 19")).toBeInTheDocument()
     expect(setButton(1, 1)).toHaveAttribute("aria-pressed", "true")
     expect(screen.getByLabelText(/Вес в кг, Шраги/)).toHaveValue("30")
@@ -228,12 +246,12 @@ describe("switching workout", () => {
     render(<WorkoutTracker />)
     markSet(1, 1)
 
-    requestSwitch("Legs + пресс")
+    requestSwitch("Ноги")
     fireEvent.keyDown(screen.getByRole("alertdialog"), { key: "Escape" })
 
     expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument()
     expect(screen.getByText("1 / 19")).toBeInTheDocument()
-    expect(workoutChoice("Pull")).toHaveAttribute("aria-checked", "true")
+    expect(workoutChoice("Спина")).toHaveAttribute("aria-checked", "true")
   })
 
   it("confirming starts the chosen workout from fresh defaults", () => {
@@ -243,12 +261,11 @@ describe("switching workout", () => {
     fireEvent.click(screen.getByRole("button", { name: "120 с" }))
     fireEvent.click(screen.getByLabelText("Звуковой сигнал в конце отдыха"))
 
-    switchTo("Push")
+    switchTo("Грудь")
 
     expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument()
-    expect(screen.getByRole("heading", { level: 1, name: /День 2 — Push/ })).toBeInTheDocument()
-    expect(screen.getByText(/грудь, плечи, трицепс/)).toBeInTheDocument()
-    expect(workoutChoice("Push")).toHaveAttribute("aria-checked", "true")
+    expect(screen.getByRole("heading", { level: 1, name: /Грудь/ })).toBeInTheDocument()
+    expect(workoutChoice("Грудь")).toHaveAttribute("aria-checked", "true")
 
     // Marks, edits, preset and sound are all back to this workout's defaults.
     expect(screen.getByText("0 / 18")).toBeInTheDocument()
@@ -268,7 +285,7 @@ describe("switching workout", () => {
     markSet(1, 1)
     expect(screen.getByText("Идёт отдых")).toBeInTheDocument()
 
-    switchTo("Push")
+    switchTo("Грудь")
 
     expect(screen.getByText("Готов к старту")).toBeInTheDocument()
     expect(timerDisplay()).toHaveTextContent("01:30")
@@ -290,7 +307,7 @@ describe("switching workout", () => {
     })
     expect(playBeep).toHaveBeenCalledTimes(1)
 
-    switchTo("Push")
+    switchTo("Грудь")
     act(() => {
       vi.advanceTimersByTime(5 * 60_000)
     })
@@ -302,8 +319,8 @@ describe("switching workout", () => {
   it("switching back is a fresh workout, not the old session", () => {
     render(<WorkoutTracker />)
     markSet(1, 1)
-    switchTo("Push")
-    switchTo("Pull")
+    switchTo("Грудь")
+    switchTo("Спина")
 
     expect(screen.getByText("0 / 19")).toBeInTheDocument()
     expect(setButton(1, 1)).toHaveAttribute("aria-pressed", "false")
@@ -313,24 +330,24 @@ describe("switching workout", () => {
     render(<WorkoutTracker />)
     markSet(1, 1)
 
-    fireEvent.click(workoutChoice("Pull"))
+    fireEvent.click(workoutChoice("Спина"))
 
     expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument()
     expect(screen.getByText("1 / 19")).toBeInTheDocument()
-    expect(workoutChoice("Pull")).toHaveAttribute("aria-checked", "true")
+    expect(workoutChoice("Спина")).toHaveAttribute("aria-checked", "true")
   })
 
   it("persists the new workout so a reload keeps it", () => {
     const first = render(<WorkoutTracker />)
-    switchTo("Legs + пресс")
+    switchTo("Ноги")
     markSet(1, 2)
     expect(readStorage()?.workoutId).toBe("legs")
     first.unmount()
 
     render(<WorkoutTracker />)
 
-    expect(screen.getByRole("heading", { level: 1, name: /День 3 — Legs \+ пресс/ })).toBeInTheDocument()
-    expect(workoutChoice("Legs + пресс")).toHaveAttribute("aria-checked", "true")
+    expect(screen.getByRole("heading", { level: 1, name: /Ноги/ })).toBeInTheDocument()
+    expect(workoutChoice("Ноги")).toHaveAttribute("aria-checked", "true")
     expect(screen.getByText("1 / 18")).toBeInTheDocument()
     expect(setButton(1, 2)).toHaveAttribute("aria-pressed", "true")
   })
@@ -338,7 +355,7 @@ describe("switching workout", () => {
   it("keeps only one stored session", () => {
     render(<WorkoutTracker />)
     markSet(1, 1)
-    switchTo("Push")
+    switchTo("Грудь")
     markSet(1, 1)
 
     expect(window.localStorage).toHaveLength(1)
@@ -359,21 +376,22 @@ describe("variable set count", () => {
 
   it("shows the planned range and defaults to three sets", () => {
     render(<WorkoutTracker />)
-    switchTo("Push")
+    switchTo("Грудь")
 
     const card = butterflyCard()
-    expect(within(card).getByText(/по плану 2–3 подхода/)).toBeInTheDocument()
+    expect(within(card).queryByText(/по плану 2–3 подхода/)).not.toBeInTheDocument()
     expect(within(card).getByRole("radio", { name: "3 подхода" })).toHaveAttribute(
       "aria-checked",
       "true"
     )
     expect(within(card).getAllByRole("button", { name: /подход \d:/i })).toHaveLength(3)
     expect(screen.getByText("0 / 18")).toBeInTheDocument()
+    expect(within(openInfo()).getByText(/Бабочка: по плану 2–3 подхода/)).toBeInTheDocument()
   })
 
   it("reflects two sets in the card, the total and the progress", () => {
     render(<WorkoutTracker />)
-    switchTo("Push")
+    switchTo("Грудь")
     markSet(1, 1)
 
     selectSets(2)
@@ -387,7 +405,7 @@ describe("variable set count", () => {
 
   it("explains that a discarded third mark is kept, and brings it back", () => {
     render(<WorkoutTracker />)
-    switchTo("Push")
+    switchTo("Грудь")
 
     const thirdSet = within(butterflyCard()).getByRole("button", { name: /подход 3:/i })
     fireEvent.click(thirdSet)
@@ -397,19 +415,23 @@ describe("variable set count", () => {
 
     expect(screen.getByText("0 / 17")).toBeInTheDocument()
     expect(
-      within(butterflyCard()).getByText(/Отмечено подходов сверх выбранных: 1/)
+      screen.queryByText(/отмечено подходов сверх выбранных/i)
+    ).not.toBeInTheDocument()
+    expect(
+      within(openInfo()).getByText(/Бабочка: отмечено подходов сверх выбранных — 1/)
     ).toBeInTheDocument()
+    closeInfo()
 
     selectSets(3)
     expect(screen.getByText("1 / 18")).toBeInTheDocument()
     expect(
-      within(butterflyCard()).queryByText(/Отмечено подходов сверх выбранных/)
+      within(openInfo()).queryByText(/отмечено подходов сверх выбранных/i)
     ).not.toBeInTheDocument()
   })
 
   it("completes the Push day at 17 sets when two are chosen", () => {
     render(<WorkoutTracker />)
-    switchTo("Push")
+    switchTo("Грудь")
     selectSets(2)
 
     for (const [exerciseIndex, exercise] of PUSH.exercises.entries()) {
@@ -421,6 +443,90 @@ describe("variable set count", () => {
 
     expect(screen.getByText("17 / 17")).toBeInTheDocument()
     expect(screen.getByText(/Тренировка завершена — отмечены все 17 подходов/)).toBeInTheDocument()
+  })
+})
+
+describe("information dialog", () => {
+  it("leaves no instructional prose on the page while closed", () => {
+    render(<WorkoutTracker />)
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
+    for (const prose of [
+      /Отмечай каждый выполненный подход/,
+      /Через день по кругу/,
+      /Таймер запускается автоматически/,
+      /Данные хранятся только в этом браузере/,
+      /Смена тренировки начинает выбранный день с нуля/,
+      /спина, бицепс, задние дельты/,
+    ]) {
+      expect(screen.queryByText(prose)).not.toBeInTheDocument()
+    }
+  })
+
+  it("opens from a 44 px labelled button and explains the current workout", () => {
+    render(<WorkoutTracker />)
+
+    const trigger = screen.getByRole("button", { name: "Информация о тренировке" })
+    expect(trigger).toHaveClass("size-11")
+
+    fireEvent.click(trigger)
+    const dialog = screen.getByRole("dialog")
+
+    expect(within(dialog).getByText("Информация о тренировке")).toBeInTheDocument()
+    expect(within(dialog).getByText(/Спина — спина, бицепс, задние дельты/)).toBeInTheDocument()
+    expect(within(dialog).getByText(/Отмечай каждый выполненный подход/)).toBeInTheDocument()
+    expect(within(dialog).getByText(/Таймер запускается автоматически/)).toBeInTheDocument()
+    expect(within(dialog).getByText(/Данные хранятся только в этом браузере/)).toBeInTheDocument()
+    expect(within(dialog).getByText(/«Начать заново» сбрасывает текущую тренировку/)).toBeInTheDocument()
+    expect(within(dialog).getByText(/Бицепс стоя: слегка согнутые колени/)).toBeInTheDocument()
+  })
+
+  it("closes on the Закрыть button, returning focus, and leaves progress and the running rest alone", async () => {
+    render(<WorkoutTracker />)
+    markSet(1, 1)
+    act(() => {
+      vi.advanceTimersByTime(20_000)
+    })
+    expect(screen.getByText("Идёт отдых")).toBeInTheDocument()
+    const saved = readStorage()
+
+    const trigger = screen.getByRole("button", { name: "Информация о тренировке" })
+    fireEvent.click(trigger)
+    await act(async () => {
+      closeInfo()
+      // Radix restores focus asynchronously, so fake timers must run.
+      await vi.advanceTimersByTimeAsync(100)
+    })
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
+    expect(trigger).toHaveFocus()
+    expect(screen.getByText("1 / 19")).toBeInTheDocument()
+    expect(setButton(1, 1)).toHaveAttribute("aria-pressed", "true")
+    expect(screen.getByText("Идёт отдых")).toBeInTheDocument()
+    expect(timerDisplay()).toHaveTextContent("01:10")
+    expect(readStorage()).toEqual(saved)
+  })
+
+  it("closes on Escape without touching the session", () => {
+    render(<WorkoutTracker />)
+    markSet(1, 1)
+
+    const dialog = openInfo()
+    fireEvent.keyDown(dialog, { key: "Escape" })
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
+    expect(screen.getByText("1 / 19")).toBeInTheDocument()
+    expect(screen.getByText("Идёт отдых")).toBeInTheDocument()
+  })
+
+  it("follows the selected workout", () => {
+    render(<WorkoutTracker />)
+    switchTo("Ноги")
+
+    const dialog = openInfo()
+    expect(within(dialog).getByText(/Ноги — ноги и пресс/)).toBeInTheDocument()
+    expect(within(dialog).getByText(/Жим ногами: или Смит-приседания/)).toBeInTheDocument()
+    expect(within(dialog).queryByText(/Горизонтальная тяга/)).not.toBeInTheDocument()
   })
 })
 
@@ -664,7 +770,7 @@ describe("persistence", () => {
   it("round-trips marks, edits, set count, preset and sound across a remount", () => {
     const first = render(<WorkoutTracker />)
 
-    switchTo("Push")
+    switchTo("Грудь")
     markSet(1, 1)
     markSet(6, 3)
     fireEvent.change(screen.getByLabelText(/Вес в кг, Жим на наклонной/), {
@@ -685,7 +791,7 @@ describe("persistence", () => {
 
     render(<WorkoutTracker />)
 
-    expect(workoutChoice("Push")).toHaveAttribute("aria-checked", "true")
+    expect(workoutChoice("Грудь")).toHaveAttribute("aria-checked", "true")
     expect(setButton(1, 1)).toHaveAttribute("aria-pressed", "true")
     expect(setButton(6, 3)).toHaveAttribute("aria-pressed", "true")
     expect(screen.getByText("2 / 17")).toBeInTheDocument()
@@ -754,7 +860,7 @@ describe("persistence", () => {
     render(<WorkoutTracker />)
 
     expect(screen.getByText("0 / 19")).toBeInTheDocument()
-    expect(workoutChoice("Pull")).toHaveAttribute("aria-checked", "true")
+    expect(workoutChoice("Спина")).toHaveAttribute("aria-checked", "true")
     expect(setButton(1, 1)).toHaveAttribute("aria-pressed", "false")
     expect(screen.getByText("Готов к старту")).toBeInTheDocument()
   })
@@ -766,7 +872,7 @@ describe("persistence", () => {
 
     render(<WorkoutTracker />)
     expect(screen.getByText("0 / 19")).toBeInTheDocument()
-    expect(workoutChoice("Pull")).toHaveAttribute("aria-checked", "true")
+    expect(workoutChoice("Спина")).toHaveAttribute("aria-checked", "true")
   })
 
   it("falls back when the saved data is the superseded v1 record", () => {
@@ -803,7 +909,7 @@ describe("persistence", () => {
 
     render(<WorkoutTracker />)
 
-    expect(screen.getByRole("heading", { level: 1, name: /День 1 — Pull/ })).toBeInTheDocument()
+    expect(screen.getByRole("heading", { level: 1, name: /Спина/ })).toBeInTheDocument()
     expect(screen.getByText("0 / 19")).toBeInTheDocument()
     expect(screen.getByText("Готов к старту")).toBeInTheDocument()
     expect(screen.getByLabelText("Звуковой сигнал в конце отдыха")).toHaveAttribute(
@@ -855,13 +961,13 @@ describe("reset", () => {
 
   it("keeps the current workout and asks nothing", () => {
     render(<WorkoutTracker />)
-    switchTo("Push")
+    switchTo("Грудь")
     markSet(1, 1)
 
     fireEvent.click(screen.getByRole("button", { name: /Начать заново/ }))
 
     expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument()
-    expect(screen.getByRole("heading", { level: 1, name: /День 2 — Push/ })).toBeInTheDocument()
+    expect(screen.getByRole("heading", { level: 1, name: /Грудь/ })).toBeInTheDocument()
     expect(screen.getByText("0 / 18")).toBeInTheDocument()
     // The selection itself is still worth remembering.
     expect(readStorage()?.workoutId).toBe("push")
@@ -887,7 +993,7 @@ describe("copying results", () => {
     })
 
     render(<WorkoutTracker />)
-    switchTo("Push")
+    switchTo("Грудь")
     markSet(1, 1)
     fireEvent.change(screen.getByLabelText(/Вес в кг, Жим лёжа/), { target: { value: "15" } })
 
@@ -897,7 +1003,7 @@ describe("copying results", () => {
 
     expect(writeText).toHaveBeenCalledTimes(1)
     const text = writeText.mock.calls[0][0] as string
-    expect(text).toContain("День 2 — Push (грудь, плечи, трицепс)")
+    expect(text).toContain("Грудь (грудь, плечи, трицепс)")
     expect(text).toContain("1. Жим лёжа — 3 × 8–10 повт., вес 15 кг — выполнено 1/3")
     expect(text).toContain("Итого: 1 / 18 подходов (6%)")
     expect(text).not.toContain("Тяга верхнего блока")
@@ -912,7 +1018,7 @@ describe("copying results", () => {
     })
 
     render(<WorkoutTracker />)
-    switchTo("Push")
+    switchTo("Грудь")
     fireEvent.click(
       within(screen.getAllByRole("listitem")[4]).getByRole("radio", { name: "2 подхода" })
     )
@@ -939,7 +1045,7 @@ describe("copying results", () => {
     })
 
     const text = writeText.mock.calls[0][0] as string
-    expect(text).toContain("День 1 — Pull (спина, бицепс, задние дельты)")
+    expect(text).toContain("Спина (спина, бицепс, задние дельты)")
     expect(text).toContain("Итого: 0 / 19 подходов (0%)")
   })
 

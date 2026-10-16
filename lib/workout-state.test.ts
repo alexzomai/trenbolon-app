@@ -594,7 +594,7 @@ describe("buildResultsText", () => {
     state = workoutReducer(state, { type: "set-reps", exerciseId: "bench-press", value: "6" })
 
     const text = buildResultsText(state)
-    expect(text).toContain("День 2 — Push (грудь, плечи, трицепс)")
+    expect(text).toContain("Грудь (грудь, плечи, трицепс)")
     expect(text).toContain("1. Жим лёжа — 3 × 6 повт., вес 15 кг — выполнено 1/3")
     expect(text).toContain("2. Жим на наклонной — 3 × 10 повт., вес не указан — выполнено 0/3")
     // Free-text reps are printed as written, without the "повт." unit.
@@ -620,7 +620,7 @@ describe("buildResultsText", () => {
   it("follows the current workout, not a fixed one", () => {
     const text = buildResultsText(createInitialState("legs"))
 
-    expect(text).toContain("День 3 — Legs + пресс (ноги и пресс)")
+    expect(text).toContain("Ноги (ноги и пресс)")
     // A bodyweight entry is not a kilogram figure, so it is not suffixed with кг.
     expect(text).toContain("5. Пресс на наклонной скамье — 3 × 10–15 повт., вес: свой вес")
     expect(text).toContain("6. Планка или скручивания на блоке — 3 × до отказа, вес не указан")
@@ -630,7 +630,7 @@ describe("buildResultsText", () => {
 
   it("starts from the Pull day by default", () => {
     const text = buildResultsText(createInitialState())
-    expect(text).toContain("День 1 — Pull (спина, бицепс, задние дельты)")
+    expect(text).toContain("Спина (спина, бицепс, задние дельты)")
     expect(text).toContain("1. Тяга верхнего блока широким хватом — 4 × 8–12 повт., вес не указан — выполнено 0/4")
     expect(text).toContain("Итого: 0 / 19 подходов (0%)")
   })
