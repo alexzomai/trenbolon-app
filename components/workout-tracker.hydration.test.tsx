@@ -28,9 +28,9 @@ vi.mock("@/lib/beep", () => ({
 
 const T0 = 1_700_000_000_000
 
-/** A workout with one set marked and a rest running since T0. */
+/** A saved Push session with one set marked and a rest running since T0. */
 function savedWorkout() {
-  return workoutReducer(createInitialState(), {
+  return workoutReducer(createInitialState("push"), {
     type: "toggle-set",
     exerciseId: "bench-press",
     setIndex: 0,
@@ -67,15 +67,21 @@ describe("server rendering", () => {
 
     const text = renderToText()
 
-    expect(text).toContain("0 / 15")
+    expect(text).toContain("День 1 — Pull")
+    expect(text).toContain("0 / 19")
     expect(text).toContain("01:30")
     expect(text).toContain("Готов к старту")
-    // The saved mark must not leak into the prerendered markup.
-    expect(text).not.toContain("1 / 15")
+    // The saved session must not leak into the prerendered markup.
+    expect(text).not.toContain("День 2 — Push")
+    expect(text).not.toContain("1 / 18")
   })
 
   it("does not warn about missing storage in the prerendered markup", () => {
     expect(renderToText()).not.toContain("Браузер запретил локальное хранилище")
+  })
+
+  it("prerenders no confirmation dialog", () => {
+    expect(renderToText()).not.toContain("будут сброшены")
   })
 })
 
@@ -109,8 +115,9 @@ describe("hydration", () => {
     vi.setSystemTime(T0 + 30_000)
     const root = await hydrate()
 
-    expect(root.textContent).toContain("1 / 15")
-    expect(root.textContent).toContain("7%")
+    expect(root.textContent).toContain("День 2 — Push")
+    expect(root.textContent).toContain("1 / 18")
+    expect(root.textContent).toContain("6%")
     expect(root.textContent).toContain("Идёт отдых")
     expect(root.textContent).toContain("01:00")
 
@@ -121,7 +128,8 @@ describe("hydration", () => {
   it("leaves a fresh workout alone and writes nothing", async () => {
     const root = await hydrate()
 
-    expect(root.textContent).toContain("0 / 15")
+    expect(root.textContent).toContain("День 1 — Pull")
+    expect(root.textContent).toContain("0 / 19")
     expect(root.textContent).toContain("Готов к старту")
     expect(window.localStorage.getItem(STORAGE_KEY)).toBeNull()
   })

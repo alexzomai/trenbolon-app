@@ -1,9 +1,11 @@
 /**
  * localStorage persistence for the workout tracker.
  *
- * Everything the user can change — marked sets, edited weights/reps, the chosen
- * rest preset, the sound preference and the live timer — is written to a single
- * versioned record. There is no server, no cookie and no other storage backend.
+ * Exactly one session is stored: the selected workout plus its marked sets,
+ * edited weights/reps, chosen set counts, rest preset, sound preference and
+ * live timer, in a single versioned record. There is no server, no cookie and
+ * no other storage backend, and no history of other workouts — switching
+ * workout starts over, so there is nothing else to keep.
  *
  * Reads are defensive on purpose: storage may be unavailable (Safari private
  * mode, disabled site data), the value may be truncated JSON, or it may come
@@ -11,9 +13,12 @@
  */
 
 import {
-  EXERCISES,
   REST_PRESETS,
-  type Exercise,
+  getWorkout,
+  isWorkoutId,
+  maxSets,
+  type Workout,
+  type WorkoutId,
 } from "./workout-plan"
 import {
   createInitialState,
@@ -24,13 +29,23 @@ import {
 } from "./workout-state"
 
 export const STORAGE_KEY = "ui-workout:state"
-export const SCHEMA_VERSION = 1
+
+/**
+ * 2 — one selected workout out of three.
+ *
+ * Version 1 held the single hard-coded chest/shoulders plan with no workout id.
+ * Switching workouts now discards the session by design, so a v1 record is
+ * simply ignored like any other incompatible one rather than migrated.
+ */
+export const SCHEMA_VERSION = 2
 
 interface PersistedState {
   version: number
+  workoutId: WorkoutId
   completed: Record<string, boolean[]>
   weights: Record<string, string>
   reps: Record<string, string>
+  setCounts: Record<string, number>
   soundEnabled: boolean
   timer: TimerState
 }
@@ -131,13 +146,10 @@ function validateTimer(value: unknown): TimerState | null {
   }
 }
 
-function validateStringMap(
-  value: unknown,
-  exercises: readonly Exercise[]
-): Record<string, string> | null {
+function validateStringMap(value: unknown, workout: Workout): Record<string, string> | null {
   if (!isPlainObject(value)) return null
   const result: Record<string, string> = {}
-  for (const exercise of exercises) {
+  for (const exercise of workout.exercises) {
     const entry = value[exercise.id]
     if (typeof entry !== "string") return null
     result[exercise.id] = entry
@@ -147,16 +159,33 @@ function validateStringMap(
 
 function validateCompleted(
   value: unknown,
-  exercises: readonly Exercise[]
+  workout: Workout
 ): Record<string, boolean[]> | null {
   if (!isPlainObject(value)) return null
   const result: Record<string, boolean[]> = {}
-  for (const exercise of exercises) {
+  for (const exercise of workout.exercises) {
     const marks = value[exercise.id]
     // Length mismatch means the plan changed under the saved data.
-    if (!Array.isArray(marks) || marks.length !== exercise.sets) return null
+    if (!Array.isArray(marks) || marks.length !== maxSets(exercise)) return null
     if (!marks.every((mark) => typeof mark === "boolean")) return null
     result[exercise.id] = marks.slice()
+  }
+  return result
+}
+
+/**
+ * Chosen set counts, read leniently: an unknown or out-of-range entry falls
+ * back to the plan's default for that exercise instead of discarding the whole
+ * record, since the marks are worth far more than the preference.
+ */
+function readSetCounts(value: unknown, workout: Workout): Record<string, number> {
+  const raw = isPlainObject(value) ? value : {}
+  const result: Record<string, number> = {}
+  for (const exercise of workout.exercises) {
+    if (!exercise.setOptions) continue
+    const entry = raw[exercise.id]
+    result[exercise.id] =
+      isFiniteNumber(entry) && exercise.setOptions.includes(entry) ? entry : exercise.sets
   }
   return result
 }
@@ -167,11 +196,7 @@ function validateCompleted(
  *
  * `now` is used to collapse a timer that expired while the page was closed.
  */
-export function parseState(
-  raw: string | null,
-  now: number,
-  exercises: readonly Exercise[] = EXERCISES
-): WorkoutState | null {
+export function parseState(raw: string | null, now: number): WorkoutState | null {
   if (!raw) return null
 
   let parsed: unknown
@@ -183,14 +208,17 @@ export function parseState(
 
   if (!isPlainObject(parsed)) return null
   if (parsed.version !== SCHEMA_VERSION) return null
+  if (!isWorkoutId(parsed.workoutId)) return null
 
-  const completed = validateCompleted(parsed.completed, exercises)
+  const workout = getWorkout(parsed.workoutId)
+
+  const completed = validateCompleted(parsed.completed, workout)
   if (!completed) return null
 
-  const weights = validateStringMap(parsed.weights, exercises)
+  const weights = validateStringMap(parsed.weights, workout)
   if (!weights) return null
 
-  const reps = validateStringMap(parsed.reps, exercises)
+  const reps = validateStringMap(parsed.reps, workout)
   if (!reps) return null
 
   if (typeof parsed.soundEnabled !== "boolean") return null
@@ -199,9 +227,11 @@ export function parseState(
   if (!timer) return null
 
   return {
+    workoutId: workout.id,
     completed,
     weights,
     reps,
+    setCounts: readSetCounts(parsed.setCounts, workout),
     soundEnabled: parsed.soundEnabled,
     // An expired deadline becomes "finished" with no pending beep.
     timer: normalizeTimer(timer, now),
@@ -213,9 +243,11 @@ export function parseState(
 export function serializeState(state: WorkoutState): string {
   const persisted: PersistedState = {
     version: SCHEMA_VERSION,
+    workoutId: state.workoutId,
     completed: state.completed,
     weights: state.weights,
     reps: state.reps,
+    setCounts: state.setCounts,
     soundEnabled: state.soundEnabled,
     timer: state.timer,
   }
@@ -230,14 +262,11 @@ export function serializeState(state: WorkoutState): string {
  * updating other components mid-render. A broken storage is reported by the
  * first write instead, which always happens from an effect.
  */
-export function loadState(
-  now: number,
-  exercises: readonly Exercise[] = EXERCISES
-): WorkoutState | null {
+export function loadState(now: number): WorkoutState | null {
   const storage = getStorage()
   if (!storage) return null
   try {
-    return parseState(storage.getItem(STORAGE_KEY), now, exercises)
+    return parseState(storage.getItem(STORAGE_KEY), now)
   } catch {
     return null
   }
@@ -278,10 +307,7 @@ export function clearState(): boolean {
   }
 }
 
-/** Saved state when it is usable, otherwise a fresh one. */
-export function loadOrCreateState(
-  now: number,
-  exercises: readonly Exercise[] = EXERCISES
-): WorkoutState {
-  return loadState(now, exercises) ?? createInitialState(exercises)
+/** Saved state when it is usable, otherwise a fresh default workout. */
+export function loadOrCreateState(now: number): WorkoutState {
+  return loadState(now) ?? createInitialState()
 }

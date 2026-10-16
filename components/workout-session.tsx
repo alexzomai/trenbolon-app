@@ -7,16 +7,21 @@ import { ExerciseCard } from "@/components/exercise-card"
 import { RestTimer } from "@/components/rest-timer"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
+import { WorkoutSelector } from "@/components/workout-selector"
 import { isAudioSupported, playBeep, unlockAudio } from "@/lib/beep"
-import { EXERCISES, TOTAL_SETS, WORKOUT_TITLE } from "@/lib/workout-plan"
+import { ROTATION_NOTE, type WorkoutId } from "@/lib/workout-plan"
 import {
   buildResultsText,
   countCompleted,
   createInitialState,
+  hiddenCompletedFor,
   isPristine,
   isWorkoutComplete,
   progressPercent,
   remainingMs as selectRemainingMs,
+  setsFor,
+  totalSets,
+  workoutOf,
   workoutReducer,
 } from "@/lib/workout-state"
 import {
@@ -65,6 +70,8 @@ export function WorkoutSession({ hydrated }: WorkoutSessionProps) {
     getStorageHealthSnapshot,
     getServerStorageHealthSnapshot
   )
+
+  const workout = workoutOf(state)
 
   // --- persist ------------------------------------------------------------
   useEffect(() => {
@@ -152,9 +159,18 @@ export function WorkoutSession({ hydrated }: WorkoutSessionProps) {
 
   const handleReset = useCallback(() => {
     dispatch({ type: "reset" })
-    clearState()
     lastBeepRef.current = null
     setCopyStatus({ kind: "idle" })
+  }, [])
+
+  /** Already confirmed by the selector; starts the chosen workout from scratch. */
+  const handleSelectWorkout = useCallback((workoutId: WorkoutId) => {
+    dispatch({ type: "select-workout", workoutId })
+    // The new session has an idle timer, so the clock interval stops on its own;
+    // forgetting the last beep keeps a finished rest from sounding again.
+    lastBeepRef.current = null
+    setCopyStatus({ kind: "idle" })
+    setNow(Date.now())
   }, [])
 
   const handleCopy = useCallback(async () => {
@@ -175,6 +191,7 @@ export function WorkoutSession({ hydrated }: WorkoutSessionProps) {
 
   // --- derived ------------------------------------------------------------
   const completed = countCompleted(state)
+  const total = totalSets(state)
   const percent = progressPercent(state)
   const complete = isWorkoutComplete(state)
   const remaining = selectRemainingMs(state.timer, now)
@@ -182,10 +199,15 @@ export function WorkoutSession({ hydrated }: WorkoutSessionProps) {
   return (
     <main className="mx-auto w-full max-w-[760px] px-4 py-8 sm:py-10">
       <header className="flex flex-col gap-3">
+        <WorkoutSelector selected={state.workoutId} onSelect={handleSelectWorkout} />
+
         <h1 className="flex items-center gap-2 text-xl font-bold sm:text-2xl">
           <Dumbbell aria-hidden="true" className="size-5 shrink-0" />
-          {WORKOUT_TITLE}
+          {workout.title}
         </h1>
+        <p className="text-[0.95rem] leading-relaxed text-muted-foreground">
+          {workout.description}. {ROTATION_NOTE}
+        </p>
         <p className="text-[0.95rem] leading-relaxed text-muted-foreground">
           Отмечай каждый выполненный подход. Прогресс пересчитывается автоматически. Вес и
           количество повторений можно менять прямо во время тренировки.
@@ -197,7 +219,7 @@ export function WorkoutSession({ hydrated }: WorkoutSessionProps) {
           <div>
             <p className="text-sm text-muted-foreground">Выполнено подходов</p>
             <p className="text-2xl font-bold tabular-nums" aria-live="polite">
-              {completed} / {TOTAL_SETS}
+              {completed} / {total}
             </p>
           </div>
           <p className="text-2xl font-bold tabular-nums" aria-hidden="true">
@@ -229,17 +251,19 @@ export function WorkoutSession({ hydrated }: WorkoutSessionProps) {
           role="status"
           className="mt-6 rounded-xl border border-success bg-success-muted px-4 py-3 text-sm"
         >
-          Тренировка завершена — отмечены все {TOTAL_SETS} подходов. Отличная работа!
+          Тренировка завершена — отмечены все {total} подходов. Отличная работа!
         </p>
       )}
 
       <ol className="mt-6 flex list-none flex-col gap-3 p-0">
-        {EXERCISES.map((exercise, index) => (
+        {workout.exercises.map((exercise, index) => (
           <li key={exercise.id}>
             <ExerciseCard
               exercise={exercise}
               index={index}
+              sets={setsFor(state, exercise)}
               marks={state.completed[exercise.id]}
+              hiddenDone={hiddenCompletedFor(state, exercise)}
               weight={state.weights[exercise.id]}
               reps={state.reps[exercise.id]}
               onToggleSet={(setIndex) => handleToggleSet(exercise.id, setIndex)}
@@ -248,6 +272,9 @@ export function WorkoutSession({ hydrated }: WorkoutSessionProps) {
               }
               onRepsChange={(value) =>
                 dispatch({ type: "set-reps", exerciseId: exercise.id, value })
+              }
+              onSetsChange={(count) =>
+                dispatch({ type: "set-sets", exerciseId: exercise.id, count })
               }
             />
           </li>
@@ -288,7 +315,12 @@ export function WorkoutSession({ hydrated }: WorkoutSessionProps) {
       <footer className="mt-6 flex flex-col gap-2 text-sm leading-relaxed text-muted-foreground">
         <p>
           Таймер запускается автоматически после каждого отмеченного подхода, кроме
-          последнего.
+          последнего. «Начать заново» сбрасывает текущую тренировку.
+        </p>
+        <p>
+          Смена тренировки начинает выбранный день с нуля — прогресс, веса, повторения,
+          таймер и настройки сбрасываются после подтверждения. Браузер хранит только одну,
+          текущую тренировку.
         </p>
         <p>
           Данные хранятся только в этом браузере, на сервер ничего не отправляется. Если

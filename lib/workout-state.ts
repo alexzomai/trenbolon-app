@@ -5,6 +5,11 @@
  * tested without a DOM, and so the UI layer only has to deal with rendering and
  * side effects (clipboard, audio, localStorage).
  *
+ * There is exactly **one** session at a time. The state carries the id of the
+ * workout it belongs to, so every selector can look the plan up itself. Picking
+ * another workout does not merge or keep anything: it starts that workout from
+ * its defaults, which is why the UI asks for confirmation first.
+ *
  * The rest timer is deadline-based: a running timer stores the absolute epoch
  * milliseconds at which it ends, never a countdown counter. That keeps it
  * correct when the browser throttles timers in a background tab, and it is what
@@ -13,10 +18,14 @@
 
 import {
   DEFAULT_REST_SECONDS,
-  EXERCISES,
+  DEFAULT_WORKOUT_ID,
   REST_PRESETS,
-  TOTAL_SETS,
+  getWorkout,
+  isWorkoutId,
+  maxSets,
   type Exercise,
+  type Workout,
+  type WorkoutId,
 } from "./workout-plan"
 
 export type TimerStatus = "idle" | "running" | "paused" | "finished"
@@ -32,12 +41,16 @@ export interface TimerState {
 }
 
 export interface WorkoutState {
-  /** exercise id -> one boolean per set. */
+  /** Which workout this session is. */
+  workoutId: WorkoutId
+  /** exercise id -> one boolean per set slot (`maxSets`). */
   completed: Record<string, boolean[]>
   /** exercise id -> edited weight string. */
   weights: Record<string, string>
   /** exercise id -> edited reps string. */
   reps: Record<string, string>
+  /** exercise id -> chosen set count. Only for exercises offering a choice. */
+  setCounts: Record<string, number>
   soundEnabled: boolean
   timer: TimerState
   /**
@@ -49,16 +62,17 @@ export interface WorkoutState {
 }
 
 export type WorkoutAction =
+  | { type: "select-workout"; workoutId: WorkoutId }
   | { type: "toggle-set"; exerciseId: string; setIndex: number; now: number }
   | { type: "set-weight"; exerciseId: string; value: string }
   | { type: "set-reps"; exerciseId: string; value: string }
+  | { type: "set-sets"; exerciseId: string; count: number }
   | { type: "select-duration"; seconds: number; now: number }
   | { type: "pause"; now: number }
   | { type: "resume"; now: number }
   | { type: "skip" }
   | { type: "set-sound"; enabled: boolean }
   | { type: "tick"; now: number }
-  | { type: "hydrate"; state: WorkoutState }
   | { type: "reset" }
 
 export function createInitialTimer(
@@ -73,59 +87,93 @@ export function createInitialTimer(
 }
 
 /**
- * Deterministic starting state. Must not read the clock or any browser API so
- * that the server-rendered markup matches the client's first render.
+ * Deterministic starting state for one workout. Must not read the clock or any
+ * browser API so that the server-rendered markup matches the client's first
+ * render.
  */
 export function createInitialState(
-  exercises: readonly Exercise[] = EXERCISES
+  workoutId: WorkoutId = DEFAULT_WORKOUT_ID
 ): WorkoutState {
   const completed: Record<string, boolean[]> = {}
   const weights: Record<string, string> = {}
   const reps: Record<string, string> = {}
+  const setCounts: Record<string, number> = {}
 
-  for (const exercise of exercises) {
-    completed[exercise.id] = new Array<boolean>(exercise.sets).fill(false)
+  for (const exercise of getWorkout(workoutId).exercises) {
+    completed[exercise.id] = new Array<boolean>(maxSets(exercise)).fill(false)
     weights[exercise.id] = exercise.weight
     reps[exercise.id] = exercise.reps
+    if (exercise.setOptions) setCounts[exercise.id] = exercise.sets
   }
 
   return {
+    workoutId,
     completed,
     weights,
     reps,
+    setCounts,
     soundEnabled: true,
     timer: createInitialTimer(),
     beepAt: null,
   }
 }
 
+/** The plan the session is running. */
+export function workoutOf(state: WorkoutState): Workout {
+  return getWorkout(state.workoutId)
+}
+
 export function isRestPreset(value: unknown): value is number {
   return typeof value === "number" && (REST_PRESETS as readonly number[]).includes(value)
 }
 
-/** Number of sets marked as done across the whole workout. */
+/** How many sets of this exercise count right now. */
+export function setsFor(state: WorkoutState, exercise: Exercise): number {
+  const chosen = state.setCounts[exercise.id]
+  if (exercise.setOptions?.includes(chosen)) return chosen
+  return exercise.sets
+}
+
+/** Number of sets marked as done, ignoring marks beyond the chosen count. */
 export function countCompleted(state: WorkoutState): number {
   let total = 0
-  for (const marks of Object.values(state.completed)) {
-    for (const done of marks) if (done) total += 1
+  for (const exercise of workoutOf(state).exercises) {
+    total += countCompletedFor(state, exercise)
   }
   return total
 }
 
-export function countCompletedFor(state: WorkoutState, exerciseId: string): number {
-  return (state.completed[exerciseId] ?? []).filter(Boolean).length
+export function countCompletedFor(state: WorkoutState, exercise: Exercise): number {
+  const marks = state.completed[exercise.id] ?? []
+  return marks.slice(0, setsFor(state, exercise)).filter(Boolean).length
+}
+
+/**
+ * Marks kept beyond the chosen set count. Lowering the count parks them instead
+ * of deleting them, so raising it again brings them back; the UI says so.
+ */
+export function hiddenCompletedFor(state: WorkoutState, exercise: Exercise): number {
+  const marks = state.completed[exercise.id] ?? []
+  return marks.slice(setsFor(state, exercise)).filter(Boolean).length
+}
+
+/** Sets to do in this session, honouring the chosen set counts. */
+export function totalSets(state: WorkoutState): number {
+  return workoutOf(state).exercises.reduce(
+    (total, exercise) => total + setsFor(state, exercise),
+    0
+  )
 }
 
 /** Whole-percent progress, rounded. 0 when there is nothing to do. */
-export function progressPercent(state: WorkoutState, total: number = TOTAL_SETS): number {
+export function progressPercent(state: WorkoutState): number {
+  const total = totalSets(state)
   if (total <= 0) return 0
   return Math.round((countCompleted(state) / total) * 100)
 }
 
-export function isWorkoutComplete(
-  state: WorkoutState,
-  total: number = TOTAL_SETS
-): boolean {
+export function isWorkoutComplete(state: WorkoutState): boolean {
+  const total = totalSets(state)
   return total > 0 && countCompleted(state) >= total
 }
 
@@ -184,11 +232,26 @@ function startTimer(timer: TimerState, now: number): TimerState {
   }
 }
 
+function findExercise(state: WorkoutState, exerciseId: string): Exercise | undefined {
+  return workoutOf(state).exercises.find((exercise) => exercise.id === exerciseId)
+}
+
 export function workoutReducer(state: WorkoutState, action: WorkoutAction): WorkoutState {
   switch (action.type) {
+    case "select-workout": {
+      // Picking another workout starts it from scratch — no progress, no timer
+      // and no settings are carried over. The UI confirms before dispatching.
+      if (!isWorkoutId(action.workoutId)) return state
+      if (action.workoutId === state.workoutId) return state
+      return createInitialState(action.workoutId)
+    }
+
     case "toggle-set": {
-      const marks = state.completed[action.exerciseId]
-      if (!marks || action.setIndex < 0 || action.setIndex >= marks.length) return state
+      const exercise = findExercise(state, action.exerciseId)
+      const marks = exercise && state.completed[action.exerciseId]
+      if (!exercise || !marks) return state
+      // Sets beyond the chosen count are not part of this session.
+      if (action.setIndex < 0 || action.setIndex >= setsFor(state, exercise)) return state
 
       const wasDone = marks[action.setIndex]
       const nextMarks = marks.slice()
@@ -223,6 +286,16 @@ export function workoutReducer(state: WorkoutState, action: WorkoutAction): Work
         ...state,
         reps: { ...state.reps, [action.exerciseId]: action.value },
       }
+
+    case "set-sets": {
+      const exercise = findExercise(state, action.exerciseId)
+      if (!exercise?.setOptions?.includes(action.count)) return state
+      if (setsFor(state, exercise) === action.count) return state
+      return {
+        ...state,
+        setCounts: { ...state.setCounts, [action.exerciseId]: action.count },
+      }
+    }
 
     case "select-duration": {
       if (!isRestPreset(action.seconds)) return state
@@ -311,11 +384,8 @@ export function workoutReducer(state: WorkoutState, action: WorkoutAction): Work
       }
     }
 
-    case "hydrate":
-      return action.state
-
     case "reset":
-      return createInitialState()
+      return createInitialState(state.workoutId)
 
     default:
       return state
@@ -323,24 +393,23 @@ export function workoutReducer(state: WorkoutState, action: WorkoutAction): Work
 }
 
 /**
- * True when nothing worth remembering has happened yet: no marks, untouched
- * weights/reps, default sound preference and an idle timer on the default
- * preset. The UI uses this to drop the saved record instead of writing a
- * default one back out.
+ * True when nothing worth remembering has happened yet: the default workout, no
+ * marks, untouched weights/reps/set counts, default sound preference and an idle
+ * timer on the default preset. The UI uses this to drop the saved record instead
+ * of writing a default one back out.
  */
-export function isPristine(
-  state: WorkoutState,
-  exercises: readonly Exercise[] = EXERCISES
-): boolean {
-  const initial = createInitialState(exercises)
+export function isPristine(state: WorkoutState): boolean {
+  const initial = createInitialState(state.workoutId)
   return (
+    state.workoutId === DEFAULT_WORKOUT_ID &&
     state.soundEnabled === initial.soundEnabled &&
     state.timer.status === "idle" &&
     state.timer.durationSeconds === initial.timer.durationSeconds &&
-    exercises.every(
+    workoutOf(state).exercises.every(
       (exercise) =>
         state.weights[exercise.id] === exercise.weight &&
         state.reps[exercise.id] === exercise.reps &&
+        setsFor(state, exercise) === exercise.sets &&
         (state.completed[exercise.id] ?? []).every((done) => !done)
     )
   )
@@ -353,34 +422,47 @@ export const TIMER_STATUS_LABELS: Record<TimerStatus, string> = {
   finished: "Отдых завершён",
 }
 
-/**
- * Plain-text summary of the current workout, used by "Скопировать результаты".
- * Reads the live edited weights/reps rather than the plan defaults.
- */
-export function buildResultsText(
-  state: WorkoutState,
-  exercises: readonly Exercise[] = EXERCISES
-): string {
-  const lines: string[] = ["Тренировка: грудь и плечи"]
+/** A weight or reps entry that is a plain figure rather than free text. */
+const NUMERIC_ENTRY = /^[\d\s.,–—-]+$/
 
-  exercises.forEach((exercise, index) => {
-    const marks = state.completed[exercise.id] ?? []
-    const done = marks.filter(Boolean).length
+/**
+ * Plain-text summary of the current session, used by "Скопировать результаты".
+ * Reads the live workout, edited weights/reps and chosen set counts rather than
+ * the plan defaults.
+ */
+export function buildResultsText(state: WorkoutState): string {
+  const workout = workoutOf(state)
+  const lines: string[] = [`${workout.title} (${workout.description})`]
+
+  workout.exercises.forEach((exercise, index) => {
+    const sets = setsFor(state, exercise)
+    const done = countCompletedFor(state, exercise)
     const weight = (state.weights[exercise.id] ?? "").trim()
     const reps = (state.reps[exercise.id] ?? "").trim()
 
-    const details = [`${exercise.sets} × ${reps || "—"} повт.`]
-    details.push(weight ? `вес ${weight} кг` : "вес не указан")
+    // Free text ("до отказа", "свой вес") must not be given a unit.
+    const details = [
+      reps
+        ? NUMERIC_ENTRY.test(reps)
+          ? `${sets} × ${reps} повт.`
+          : `${sets} × ${reps}`
+        : `${sets} × — повт.`,
+    ]
+    details.push(
+      weight
+        ? NUMERIC_ENTRY.test(weight)
+          ? `вес ${weight} кг`
+          : `вес: ${weight}`
+        : "вес не указан"
+    )
 
     lines.push(
-      `${index + 1}. ${exercise.name} — ${details.join(", ")} — выполнено ${done}/${exercise.sets}`
+      `${index + 1}. ${exercise.name} — ${details.join(", ")} — выполнено ${done}/${sets}`
     )
   })
 
-  const total = exercises.reduce((sum, exercise) => sum + exercise.sets, 0)
   const completed = countCompleted(state)
-  const percent = progressPercent(state, total)
-  lines.push(`Итого: ${completed} / ${total} подходов (${percent}%)`)
+  lines.push(`Итого: ${completed} / ${totalSets(state)} подходов (${progressPercent(state)}%)`)
   lines.push(`Отдых между подходами: ${state.timer.durationSeconds} с`)
 
   return lines.join("\n")
