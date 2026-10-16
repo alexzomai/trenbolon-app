@@ -1,0 +1,35 @@
+# Rebuilt inside the image.
+node_modules
+.next
+out
+build
+
+# VCS and editor noise.
+.git
+.gitignore
+.vscode
+.idea
+.DS_Store
+
+# Tests and tooling — not needed to produce the production bundle.
+**/*.test.ts
+**/*.test.tsx
+vitest.config.mts
+vitest.setup.ts
+coverage
+
+# Docs and container definitions.
+README.md
+AGENTS.md
+Dockerfile
+.dockerignore
+compose.yaml
+compose.*.yaml
+
+# Logs, caches, secrets.
+*.log
+npm-debug.log*
+*.tsbuildinfo
+.env
+.env.*
+.vercel

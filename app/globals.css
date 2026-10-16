@@ -1,0 +1,106 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+  --font-heading: var(--font-sans);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-success-muted: var(--success-muted);
+  --color-selected: var(--selected);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+}
+
+/*
+ * Single dark theme on a pure black background, matching the reference
+ * screenshots. There is no light mode and no theme switcher.
+ */
+:root {
+  color-scheme: dark;
+
+  /* System font stack only — nothing is fetched over the network. */
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue",
+    Arial, "Noto Sans", "Liberation Sans", sans-serif, "Apple Color Emoji",
+    "Segoe UI Emoji";
+  --font-mono:
+    ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+    "Liberation Mono", monospace;
+
+  --background: #000000;
+  --foreground: #ffffff;
+
+  /* Exercise cards sit on the black page behind a thin border. */
+  --card: #000000;
+  --card-foreground: #ffffff;
+  --popover: #1c1c1e;
+  --popover-foreground: #ffffff;
+
+  --primary: #ffffff;
+  --primary-foreground: #000000;
+
+  /* Gray fill shared by inputs, preset buttons and action buttons. */
+  --secondary: #2c2c2e;
+  --secondary-foreground: #ffffff;
+
+  /* Gray panel behind the rest timer. */
+  --muted: #1c1c1e;
+  --muted-foreground: #8e8e93;
+
+  --accent: #2c2c2e;
+  --accent-foreground: #ffffff;
+  --destructive: #ff453a;
+
+  --border: #2a2a2d;
+  --input: #2c2c2e;
+  --ring: #3b82f6;
+
+  /* Completed sets, the check mark and the progress bar. */
+  --success: #22c55e;
+  --success-foreground: #ffffff;
+  --success-muted: #0e2a16;
+
+  /* Selected rest preset. */
+  --selected: #3b82f6;
+
+  --radius: 0.625rem;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    @apply font-sans;
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
