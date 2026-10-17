@@ -324,8 +324,7 @@ export function WorkoutSession({ hydrated }: WorkoutSessionProps) {
         />
         <p className="mt-2 text-xs text-muted-foreground">
           Фоновый звук зависит от браузера и ОС. При блокировке экрана или сворачивании браузера звук может прерваться.
-          Сначала запусти отдых нажатием. Не полагайся на фоновый сигнал для важных напоминаний.
-          Сигнал медиаплеера длится до 30 секунд.
+          Сначала запусти отдых нажатием.
         </p>
         {(audioStatus === "blocked" || audioStatus === "interrupted") && (
           <p role="alert" className="mt-2 text-sm text-destructive">
