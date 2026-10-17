@@ -3,7 +3,7 @@ import type { Metadata, Viewport } from "next"
 import "./globals.css"
 
 export const metadata: Metadata = {
-  title: "Тренировки: Спина / Грудь / Ноги",
+  title: "Trenbolon App",
   description:
     "Интерактивный трекер тренировок Спина / Грудь / Ноги: выбирай день, отмечай подходы, меняй вес и повторения, следи за отдыхом между подходами.",
 }
