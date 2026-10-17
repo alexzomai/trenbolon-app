@@ -203,7 +203,7 @@ export function SavedWorkoutsPanel({ state, onStart }: SavedWorkoutsPanelProps) 
             <DialogDescription>
               {editing
                 ? "Изменения не применяются к уже запущенной тренировке."
-                : "Сохранённые тренировки хранятся только в этом браузере."}
+                : "Сохранённые тренировки хранятся только в этом браузере и могут исчезнуть после очистки его данных."}
             </DialogDescription>
           </DialogHeader>
 

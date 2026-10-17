@@ -84,6 +84,7 @@ describe("library list states", () => {
     render(<WorkoutTracker />)
     openLibrary()
     expect(screen.getByText(/Пока нет сохранённых тренировок/)).toBeInTheDocument()
+    expect(screen.getByText(/могут исчезнуть после очистки его данных/)).toBeInTheDocument()
   })
 
   it("shows an error, not an empty list, when the catalog is unreadable, and retries", () => {
