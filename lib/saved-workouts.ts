@@ -3,6 +3,8 @@ import { getStorage } from "./storage-access"
 
 export const SAVED_WORKOUTS_KEY = "ui-workout:workouts"
 export const SAVED_WORKOUTS_VERSION = 1
+export const MAX_SETS = 100
+export const MAX_EXERCISES_PER_WORKOUT = 1000
 
 /** Definitions only. Live progress/timer state belongs to workout-storage. */
 export interface WorkoutDraft {
@@ -33,7 +35,7 @@ const object = (value: unknown): value is Record<string, unknown> =>
 const text = (value: unknown): value is string =>
   typeof value === "string" && value.trim().length > 0
 const sets = (value: unknown): value is number =>
-  typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= 100
+  typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= MAX_SETS
 const safeId = (value: unknown): value is string =>
   text(value) && !["__proto__", "constructor", "prototype"].includes(value)
 
@@ -41,7 +43,7 @@ function validDraft(value: unknown): value is WorkoutDraft {
   if (!object(value) || !text(value.title) || !text(value.label)) return false
   if (typeof value.soundEnabled !== "boolean") return false
   if (!(REST_PRESETS as readonly unknown[]).includes(value.restSeconds)) return false
-  if (!Array.isArray(value.exercises) || !value.exercises.length || value.exercises.length > 1000) return false
+  if (!Array.isArray(value.exercises) || !value.exercises.length || value.exercises.length > MAX_EXERCISES_PER_WORKOUT) return false
   const ids = new Set<string>()
   for (const exercise of value.exercises) {
     if (!object(exercise) || !safeId(exercise.id) || ids.has(exercise.id)) return false
@@ -169,6 +171,32 @@ export function createWorkoutRepository(
     return written.ok ? { ok: true, value } : written
   }
 
+  /**
+   * Appends every draft as a new workout with a fresh ID, in one write.
+   * All-or-nothing: any invalid draft, unreadable catalog or failed write leaves
+   * the stored catalog untouched. Existing workouts are never modified.
+   */
+  function importDrafts(drafts: readonly WorkoutDraft[]): StorageResult<SavedWorkout[]> {
+    if (!drafts.length || !drafts.every(validDraft)) return fail("invalid")
+    const target = storage()
+    if (!target) return fail("unavailable")
+    const result = read(target)
+    if (!result.ok) return result
+    const taken = new Set(result.value.map((workout) => workout.id))
+    const added: SavedWorkout[] = []
+    for (const draft of drafts) {
+      let token: string
+      try { token = newId() } catch { return fail("unavailable") }
+      if (!text(token)) return fail("invalid")
+      const id: SavedWorkout["id"] = `user:${token}`
+      if (taken.has(id)) return fail("invalid")
+      taken.add(id)
+      added.push({ ...copyDraft(draft), id })
+    }
+    const written = write(target, [...result.value, ...added])
+    return written.ok ? { ok: true, value: added } : written
+  }
+
   function remove(id: string): StorageResult<null> {
     const target = storage()
     if (!target) return fail("unavailable")
@@ -180,7 +208,7 @@ export function createWorkoutRepository(
   }
 
   return { list, get, create: (draft: WorkoutDraft) => save(draft),
-    update: (id: string, draft: WorkoutDraft) => save(draft, id), remove }
+    update: (id: string, draft: WorkoutDraft) => save(draft, id), remove, importDrafts }
 }
 
 export const savedWorkouts = createWorkoutRepository()

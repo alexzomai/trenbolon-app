@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "workouts": [
+    {
+      "label": "Плечи",
+      "title": "Плечи и руки",
+      "restSeconds": 90,
+      "soundEnabled": true,
+      "exercises": [
+        { "name": "Жим гантелей сидя", "sets": 3, "reps": "10–12", "weight": "16 кг" },
+        { "name": "Махи в стороны", "sets": 3, "setOptions": [2, 3, 4], "reps": "12–15", "weight": "8 кг" },
+        { "name": "Подтягивания", "sets": 3, "reps": "до отказа", "weight": "" }
+      ]
+    }
+  ]
+}

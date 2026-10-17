@@ -1,8 +1,9 @@
 "use client"
 
-import { Library } from "lucide-react"
+import { ArrowLeftRight, Library } from "lucide-react"
 import { useEffect, useState } from "react"
 
+import { WorkoutTransfer } from "@/components/workout-transfer"
 import { SavedWorkoutEditor } from "@/components/saved-workout-editor"
 import {
   AlertDialog,
@@ -40,6 +41,7 @@ import { WORKOUTS, WORKOUT_IDS } from "@/lib/workout-plan"
 import { isPristine, setsFor, workoutOf, type WorkoutState } from "@/lib/workout-state"
 
 export const LIBRARY_BUTTON_LABEL = "Мои тренировки"
+export const TRANSFER_BUTTON_LABEL = "Импорт / экспорт"
 
 interface Editing {
   /** Set when editing an existing workout; absent for a new one. */
@@ -87,6 +89,7 @@ export function SavedWorkoutsPanel({ state, onStart }: SavedWorkoutsPanelProps) 
   const [pendingStart, setPendingStart] = useState<SavedWorkout | null>(null)
   const [pendingDelete, setPendingDelete] = useState<SavedWorkout | null>(null)
   const [discard, setDiscard] = useState<Discard>(null)
+  const [transfer, setTransfer] = useState(false)
 
   const dirty = editing !== null && !formsEqual(editing.form, editing.initial)
 
@@ -126,6 +129,7 @@ export function SavedWorkoutsPanel({ state, onStart }: SavedWorkoutsPanelProps) 
       return
     }
     setEditing(null)
+    setTransfer(false)
     setOpen(false)
   }
 
@@ -198,11 +202,15 @@ export function SavedWorkoutsPanel({ state, onStart }: SavedWorkoutsPanelProps) 
         <DialogContent aria-describedby={undefined} className="max-h-[90dvh]">
           <DialogHeader>
             <DialogTitle>
-              {editing ? (editing.id ? "Редактирование тренировки" : "Новая тренировка") : LIBRARY_BUTTON_LABEL}
+              {editing
+                ? editing.id ? "Редактирование тренировки" : "Новая тренировка"
+                : transfer ? TRANSFER_BUTTON_LABEL : LIBRARY_BUTTON_LABEL}
             </DialogTitle>
             <DialogDescription>
               {editing
                 ? "Изменения не применяются к уже запущенной тренировке."
+                : transfer
+                ? "Перенос тренировок между устройствами и браузерами в виде JSON-файла."
                 : "Сохранённые тренировки хранятся только в этом браузере и могут исчезнуть после очистки его данных."}
             </DialogDescription>
           </DialogHeader>
@@ -228,6 +236,25 @@ export function SavedWorkoutsPanel({ state, onStart }: SavedWorkoutsPanelProps) 
                   onClick={handleCancelEditor}
                 >
                   Отмена
+                </Button>
+              </DialogFooter>
+            </>
+          ) : transfer ? (
+            <>
+              <DialogBody>
+                <WorkoutTransfer
+                  catalog={catalog?.ok ? catalog.value : null}
+                  onBack={() => setTransfer(false)}
+                  onImported={(count) => {
+                    setTransfer(false)
+                    setNotice({ kind: "ok", text: `Импортировано тренировок: ${count}.` })
+                    reload()
+                  }}
+                />
+              </DialogBody>
+              <DialogFooter>
+                <Button type="button" variant="secondary" className="h-11 grow px-3 font-normal" onClick={() => handleOpenChange(false)}>
+                  Закрыть
                 </Button>
               </DialogFooter>
             </>
@@ -339,6 +366,19 @@ export function SavedWorkoutsPanel({ state, onStart }: SavedWorkoutsPanelProps) 
                       </Button>
                     ))}
                   </div>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    className="h-11 px-3 font-normal"
+                    onClick={() => {
+                      setNotice(null)
+                      reload()
+                      setTransfer(true)
+                    }}
+                  >
+                    <ArrowLeftRight aria-hidden="true" className="size-4" />
+                    {TRANSFER_BUTTON_LABEL}
+                  </Button>
                 </section>
               </DialogBody>
               <DialogFooter>
