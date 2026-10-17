@@ -17,14 +17,16 @@ import {
   getWorkout,
   isWorkoutId,
   maxSets,
-  type Workout,
   type WorkoutId,
 } from "./workout-plan"
+import { isSavedWorkoutId, parseSavedWorkout, type SavedWorkout } from "./saved-workouts"
 import {
   createInitialState,
+  freezeWorkout,
   normalizeTimer,
   type TimerState,
   type TimerStatus,
+  type WorkoutDefinition,
   type WorkoutState,
 } from "./workout-state"
 
@@ -43,7 +45,9 @@ export const SCHEMA_VERSION = 3
 
 interface PersistedState {
   version: number
-  workoutId: WorkoutId
+  workoutId: WorkoutId | SavedWorkout["id"]
+  /** Only for saved-workout sessions; built-in records omit it (still version 3). */
+  snapshot?: SavedWorkout
   completed: Record<string, boolean[]>
   weights: Record<string, string>
   reps: Record<string, string>
@@ -54,19 +58,9 @@ interface PersistedState {
 
 const TIMER_STATUSES: readonly TimerStatus[] = ["idle", "running", "paused", "finished"]
 
-/**
- * Returns the Storage object, or null when it cannot be touched at all.
- * Accessing `window.localStorage` itself can throw when site data is blocked,
- * hence the try/catch around the property read.
- */
-export function getStorage(): Storage | null {
-  try {
-    if (typeof window === "undefined") return null
-    return window.localStorage ?? null
-  } catch {
-    return null
-  }
-}
+import { getStorage } from "./storage-access"
+
+export { getStorage }
 
 /* -------------------------------------------------------------------------
  * Storage health, modelled as an external store.
@@ -148,7 +142,7 @@ function validateTimer(value: unknown): TimerState | null {
   }
 }
 
-function validateStringMap(value: unknown, workout: Workout): Record<string, string> | null {
+function validateStringMap(value: unknown, workout: WorkoutDefinition): Record<string, string> | null {
   if (!isPlainObject(value)) return null
   const result: Record<string, string> = {}
   for (const exercise of workout.exercises) {
@@ -161,7 +155,7 @@ function validateStringMap(value: unknown, workout: Workout): Record<string, str
 
 function validateCompleted(
   value: unknown,
-  workout: Workout
+  workout: WorkoutDefinition
 ): Record<string, boolean[]> | null {
   if (!isPlainObject(value)) return null
   const result: Record<string, boolean[]> = {}
@@ -180,7 +174,7 @@ function validateCompleted(
  * back to the plan's default for that exercise instead of discarding the whole
  * record, since the marks are worth far more than the preference.
  */
-function readSetCounts(value: unknown, workout: Workout): Record<string, number> {
+function readSetCounts(value: unknown, workout: WorkoutDefinition): Record<string, number> {
   const raw = isPlainObject(value) ? value : {}
   const result: Record<string, number> = {}
   for (const exercise of workout.exercises) {
@@ -210,9 +204,19 @@ export function parseState(raw: string | null, now: number): WorkoutState | null
 
   if (!isPlainObject(parsed)) return null
   if (parsed.version !== SCHEMA_VERSION) return null
-  if (!isWorkoutId(parsed.workoutId)) return null
 
-  const workout = getWorkout(parsed.workoutId)
+  // A saved-workout session carries its own validated snapshot and never
+  // consults the catalog; a built-in one must not carry a snapshot at all.
+  let snapshot: SavedWorkout | undefined
+  let workout: WorkoutDefinition
+  if (isSavedWorkoutId(parsed.workoutId)) {
+    snapshot = freezeWorkout(parseSavedWorkout(parsed.snapshot))
+    if (!snapshot || snapshot.id !== parsed.workoutId) return null
+    workout = snapshot
+  } else {
+    if (!isWorkoutId(parsed.workoutId) || parsed.snapshot !== undefined) return null
+    workout = getWorkout(parsed.workoutId)
+  }
 
   const completed = validateCompleted(parsed.completed, workout)
   if (!completed) return null
@@ -230,6 +234,7 @@ export function parseState(raw: string | null, now: number): WorkoutState | null
 
   return {
     workoutId: workout.id,
+    ...(snapshot ? { snapshot } : {}),
     completed,
     weights,
     reps,
@@ -246,6 +251,7 @@ export function serializeState(state: WorkoutState): string {
   const persisted: PersistedState = {
     version: SCHEMA_VERSION,
     workoutId: state.workoutId,
+    ...(state.snapshot ? { snapshot: state.snapshot } : {}),
     completed: state.completed,
     weights: state.weights,
     reps: state.reps,

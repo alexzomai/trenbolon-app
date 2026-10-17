@@ -19,6 +19,7 @@ import {
   remainingMs,
   setsFor,
   totalSets,
+  workoutOf,
   workoutReducer,
   type WorkoutState,
 } from "./workout-state"
@@ -31,7 +32,7 @@ const LEGS = getWorkout("legs")
 
 /** An exercise of the state's own workout, by id. */
 function ex(state: WorkoutState, exerciseId: string) {
-  return getWorkout(state.workoutId).exercises.find(
+  return workoutOf(state).exercises.find(
     (exercise) => exercise.id === exerciseId
   )!
 }
@@ -48,7 +49,7 @@ function toggle(
 /** Mark every set that counts in the current session. */
 function markAll(state: WorkoutState, now = T0): WorkoutState {
   let next = state
-  for (const exercise of getWorkout(state.workoutId).exercises) {
+  for (const exercise of workoutOf(state).exercises) {
     for (let setIndex = 0; setIndex < setsFor(next, exercise); setIndex += 1) {
       next = toggle(next, exercise.id, setIndex, now)
     }

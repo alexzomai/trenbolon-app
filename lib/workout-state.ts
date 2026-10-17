@@ -27,6 +27,10 @@ import {
   type Workout,
   type WorkoutId,
 } from "./workout-plan"
+import { parseSavedWorkout, type SavedWorkout } from "./saved-workouts"
+
+/** Anything the session can run: a built-in plan or a saved user workout. */
+export type WorkoutDefinition = Workout | SavedWorkout
 
 export type TimerStatus = "idle" | "running" | "paused" | "finished"
 
@@ -41,8 +45,14 @@ export interface TimerState {
 }
 
 export interface WorkoutState {
-  /** Which workout this session is. */
-  workoutId: WorkoutId
+  /** Which workout this session is: a built-in id or a saved workout's id. */
+  workoutId: WorkoutId | SavedWorkout["id"]
+  /**
+   * Immutable copy of the saved workout this session started from. Absent for
+   * built-ins. The session never re-reads the catalog, so editing or deleting
+   * the saved definition cannot change a running workout.
+   */
+  snapshot?: SavedWorkout
   /** exercise id -> one boolean per set slot (`maxSets`). */
   completed: Record<string, boolean[]>
   /** exercise id -> edited weight string. */
@@ -63,6 +73,7 @@ export interface WorkoutState {
 
 export type WorkoutAction =
   | { type: "select-workout"; workoutId: WorkoutId }
+  | { type: "start-saved-workout"; workout: SavedWorkout }
   | { type: "toggle-set"; exerciseId: string; setIndex: number; now: number }
   | { type: "set-weight"; exerciseId: string; value: string }
   | { type: "set-reps"; exerciseId: string; value: string }
@@ -92,14 +103,20 @@ export function createInitialTimer(
  * render.
  */
 export function createInitialState(
-  workoutId: WorkoutId = DEFAULT_WORKOUT_ID
+  source: WorkoutId | SavedWorkout = DEFAULT_WORKOUT_ID
 ): WorkoutState {
+  // A saved workout is copied (and re-validated) so the session owns its data.
+  const snapshot = typeof source === "string" ? undefined : freezeWorkout(parseSavedWorkout(source))
+  if (typeof source !== "string" && !snapshot) return createInitialState()
+  const definition: WorkoutDefinition = snapshot ?? getWorkout(source as WorkoutId)
+  const workoutId = snapshot ? snapshot.id : (source as WorkoutId)
+
   const completed: Record<string, boolean[]> = {}
   const weights: Record<string, string> = {}
   const reps: Record<string, string> = {}
   const setCounts: Record<string, number> = {}
 
-  for (const exercise of getWorkout(workoutId).exercises) {
+  for (const exercise of definition.exercises) {
     completed[exercise.id] = new Array<boolean>(maxSets(exercise)).fill(false)
     weights[exercise.id] = exercise.weight
     reps[exercise.id] = exercise.reps
@@ -108,19 +125,37 @@ export function createInitialState(
 
   return {
     workoutId,
+    ...(snapshot ? { snapshot } : {}),
     completed,
     weights,
     reps,
     setCounts,
-    soundEnabled: true,
-    timer: createInitialTimer(),
+    soundEnabled: snapshot ? snapshot.soundEnabled : true,
+    timer: createInitialTimer(snapshot ? snapshot.restSeconds : DEFAULT_REST_SECONDS),
     beepAt: null,
   }
 }
 
-/** The plan the session is running. */
-export function workoutOf(state: WorkoutState): Workout {
-  return getWorkout(state.workoutId)
+/** Deep-freezes a validated copy so nothing can mutate a running snapshot. */
+export function freezeWorkout(workout: SavedWorkout | null): SavedWorkout | undefined {
+  if (!workout) return undefined
+  for (const exercise of workout.exercises) {
+    if (exercise.setOptions) Object.freeze(exercise.setOptions)
+    Object.freeze(exercise)
+  }
+  Object.freeze(workout.exercises)
+  return Object.freeze(workout)
+}
+
+/** The plan the session is running: its snapshot, else the built-in. */
+export function workoutOf(state: WorkoutState): WorkoutDefinition {
+  if (state.snapshot) return state.snapshot
+  return getWorkout(state.workoutId as WorkoutId)
+}
+
+/** The definition a reset/restart of this session starts from. */
+function sourceOf(state: WorkoutState): WorkoutId | SavedWorkout {
+  return state.snapshot ?? (state.workoutId as WorkoutId)
 }
 
 export function isRestPreset(value: unknown): value is number {
@@ -244,6 +279,13 @@ export function workoutReducer(state: WorkoutState, action: WorkoutAction): Work
       if (!isWorkoutId(action.workoutId)) return state
       if (action.workoutId === state.workoutId) return state
       return createInitialState(action.workoutId)
+    }
+
+    case "start-saved-workout": {
+      // Always starts over, even for the id already running: the caller passes
+      // the newest catalog version after the user confirmed the restart.
+      if (!parseSavedWorkout(action.workout)) return state
+      return createInitialState(action.workout)
     }
 
     case "toggle-set": {
@@ -385,7 +427,7 @@ export function workoutReducer(state: WorkoutState, action: WorkoutAction): Work
     }
 
     case "reset":
-      return createInitialState(state.workoutId)
+      return createInitialState(sourceOf(state))
 
     default:
       return state
@@ -399,7 +441,7 @@ export function workoutReducer(state: WorkoutState, action: WorkoutAction): Work
  * of writing a default one back out.
  */
 export function isPristine(state: WorkoutState): boolean {
-  const initial = createInitialState(state.workoutId)
+  const initial = createInitialState(sourceOf(state))
   return (
     state.workoutId === DEFAULT_WORKOUT_ID &&
     state.soundEnabled === initial.soundEnabled &&

@@ -1,5 +1,5 @@
 import { REST_PRESETS, type Exercise, type Workout } from "./workout-plan"
-import { getStorage } from "./workout-storage"
+import { getStorage } from "./storage-access"
 
 export const SAVED_WORKOUTS_KEY = "ui-workout:workouts"
 export const SAVED_WORKOUTS_VERSION = 1
@@ -72,6 +72,20 @@ function copyDraft(value: WorkoutDraft): WorkoutDraft {
   }
 }
 
+export function isSavedWorkoutId(value: unknown): value is SavedWorkout["id"] {
+  return typeof value === "string" && value.startsWith("user:") && value.length > 5
+}
+
+/**
+ * Pure snapshot validator: no storage access, no catalog lookup. Returns a deep
+ * copy of a well-formed saved workout (user-namespaced id, valid draft) or null.
+ * Shared by the catalog reader and by session persistence/reducer.
+ */
+export function parseSavedWorkout(value: unknown): SavedWorkout | null {
+  if (!validDraft(value) || !object(value) || !isSavedWorkoutId(value.id)) return null
+  return { ...copyDraft(value), id: value.id }
+}
+
 export function draftFromWorkout(
   workout: Workout | SavedWorkout,
   restSeconds = "restSeconds" in workout ? workout.restSeconds : 90,
@@ -101,10 +115,10 @@ export function createWorkoutRepository(
     const ids = new Set<string>()
     const workouts: SavedWorkout[] = []
     for (const workout of data.workouts) {
-      if (!validDraft(workout) || !object(workout) || !text(workout.id) ||
-        !workout.id.startsWith("user:") || workout.id.length <= 5 || ids.has(workout.id)) return fail("corrupt")
-      ids.add(workout.id)
-      workouts.push({ ...copyDraft(workout), id: workout.id as SavedWorkout["id"] })
+      const parsed = parseSavedWorkout(workout)
+      if (!parsed || ids.has(parsed.id)) return fail("corrupt")
+      ids.add(parsed.id)
+      workouts.push(parsed)
     }
     return { ok: true, value: workouts }
   }

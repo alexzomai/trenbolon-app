@@ -14,7 +14,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
-import { type Workout } from "@/lib/workout-plan"
+import { type WorkoutDefinition } from "@/lib/workout-state"
 
 export const INFO_BUTTON_LABEL = "Информация о тренировке"
 
@@ -27,7 +27,7 @@ export interface HiddenMark {
 
 interface WorkoutInfoProps {
   /** The running workout; every section below is read from it. */
-  workout: Workout
+  workout: WorkoutDefinition
   /** Exercises that currently hold marks beyond their chosen set count. */
   hiddenMarks: readonly HiddenMark[]
 }

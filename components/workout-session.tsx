@@ -7,10 +7,12 @@ import { ExerciseCard } from "@/components/exercise-card"
 import { RestTimer } from "@/components/rest-timer"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
+import { SavedWorkoutsPanel } from "@/components/saved-workouts-panel"
 import { WorkoutInfo } from "@/components/workout-info"
 import { WorkoutSelector } from "@/components/workout-selector"
 import { isAudioSupported, startAlarm, stopAlarm, unlockAudio } from "@/lib/beep"
-import { type WorkoutId } from "@/lib/workout-plan"
+import { type SavedWorkout } from "@/lib/saved-workouts"
+import { isWorkoutId, type WorkoutId } from "@/lib/workout-plan"
 import {
   buildResultsText,
   countCompleted,
@@ -200,6 +202,15 @@ export function WorkoutSession({ hydrated }: WorkoutSessionProps) {
     setNow(Date.now())
   }, [silenceAlarm])
 
+  /** Already confirmed by the library; starts the saved workout from scratch. */
+  const handleStartSaved = useCallback((saved: SavedWorkout) => {
+    silenceAlarm()
+    dispatch({ type: "start-saved-workout", workout: saved })
+    lastBeepRef.current = null
+    setCopyStatus({ kind: "idle" })
+    setNow(Date.now())
+  }, [silenceAlarm])
+
   const handleCopy = useCallback(async () => {
     const text = buildResultsText(state)
     try {
@@ -235,7 +246,11 @@ export function WorkoutSession({ hydrated }: WorkoutSessionProps) {
   return (
     <main className="mx-auto w-full max-w-[760px] px-4 py-8 sm:py-10">
       <header className="flex flex-col gap-3">
-        <WorkoutSelector selected={state.workoutId} onSelect={handleSelectWorkout} />
+        <WorkoutSelector
+          selected={isWorkoutId(state.workoutId) ? state.workoutId : null}
+          onSelect={handleSelectWorkout}
+        />
+        <SavedWorkoutsPanel state={state} onStart={handleStartSaved} />
 
         {/* The ⓘ button holds every explanation the page used to spell out. */}
         <div className="flex items-start justify-between gap-3">

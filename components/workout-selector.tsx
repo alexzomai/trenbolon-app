@@ -20,7 +20,8 @@ export const SWITCH_WARNING =
   "При смене тренировки текущий прогресс, изменённые веса и повторения, таймер и настройки будут сброшены. Продолжить?"
 
 interface WorkoutSelectorProps {
-  selected: WorkoutId
+  /** The running built-in, or null while a saved (user) workout is running. */
+  selected: WorkoutId | null
   /** Called only after the user confirms the switch. */
   onSelect: (workoutId: WorkoutId) => void
 }
@@ -41,7 +42,7 @@ export function WorkoutSelector({ selected, onSelect }: WorkoutSelectorProps) {
     <>
       <ToggleGroup
         type="single"
-        value={selected}
+        value={selected ?? ""}
         onValueChange={handleValueChange}
         aria-label="Тренировка"
         className="grid w-full grid-cols-3 gap-2"
