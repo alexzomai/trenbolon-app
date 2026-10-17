@@ -21,7 +21,8 @@ import {
 
 vi.mock("@/lib/beep", () => ({
   isAudioSupported: vi.fn(() => true),
-  playBeep: vi.fn(() => true),
+  startAlarm: vi.fn(() => true),
+  stopAlarm: vi.fn(),
   unlockAudio: vi.fn(),
   resetAudioForTests: vi.fn(),
 }))

@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import { WorkoutInfo } from "@/components/workout-info"
 import { WorkoutSelector } from "@/components/workout-selector"
-import { isAudioSupported, playBeep, unlockAudio } from "@/lib/beep"
+import { isAudioSupported, startAlarm, stopAlarm, unlockAudio } from "@/lib/beep"
 import { type WorkoutId } from "@/lib/workout-plan"
 import {
   buildResultsText,
@@ -62,6 +62,9 @@ export function WorkoutSession({ hydrated }: WorkoutSessionProps) {
   // prerendered HTML never claims audio is missing.
   const [audioSupported] = useState(() => (hydrated ? isAudioSupported() : true))
   const [copyStatus, setCopyStatus] = useState<CopyStatus>({ kind: "idle" })
+  // Transient UI only: whether the repeating alarm is sounding right now. It is
+  // never persisted, so a reload never shows a stop button for an old rest.
+  const [alarmActive, setAlarmActive] = useState(false)
   const lastBeepRef = useRef<number | null>(null)
 
   // A failed write flips a flag inside the storage module and notifies here,
@@ -115,28 +118,42 @@ export function WorkoutSession({ hydrated }: WorkoutSessionProps) {
     dispatch({ type: "tick", now: Date.now() })
   }, [now, status, deadline])
 
-  // --- beep ---------------------------------------------------------------
+  // --- alarm --------------------------------------------------------------
+  /** Silence the alarm and hide its stop button. Safe to call when idle. */
+  const silenceAlarm = useCallback(() => {
+    stopAlarm()
+    setAlarmActive(false)
+  }, [])
+
+  // The reducer only sets `beepAt` for a rest that ended naturally while sound
+  // was on, so a muted session and a restored expired timer stay silent.
   useEffect(() => {
     if (state.beepAt === null) return
     if (lastBeepRef.current === state.beepAt) return
     lastBeepRef.current = state.beepAt
-    playBeep()
+    setAlarmActive(startAlarm())
   }, [state.beepAt])
+
+  // Leaving the page must not leave oscillators or a repeat timer behind.
+  useEffect(() => stopAlarm, [])
 
   // --- handlers -----------------------------------------------------------
   const handleToggleSet = useCallback((exerciseId: string, setIndex: number) => {
     // This click is a user gesture, so it is a valid moment to unlock audio for
     // the rest it is about to start.
     unlockAudio()
+    // A new set means a new countdown: the previous rest's alarm is over.
+    silenceAlarm()
     dispatch({ type: "toggle-set", exerciseId, setIndex, now: Date.now() })
     setNow(Date.now())
-  }, [])
+  }, [silenceAlarm])
 
   const handleSelectDuration = useCallback((seconds: number) => {
     unlockAudio()
+    silenceAlarm()
     dispatch({ type: "select-duration", seconds, now: Date.now() })
     setNow(Date.now())
-  }, [])
+  }, [silenceAlarm])
 
   const handlePauseResume = useCallback(() => {
     unlockAudio()
@@ -150,29 +167,38 @@ export function WorkoutSession({ hydrated }: WorkoutSessionProps) {
   }, [state.timer.status])
 
   const handleSkip = useCallback(() => {
+    silenceAlarm()
     dispatch({ type: "skip" })
-  }, [])
+  }, [silenceAlarm])
 
-  const handleSoundChange = useCallback((enabled: boolean) => {
-    if (enabled) unlockAudio()
-    dispatch({ type: "set-sound", enabled })
-  }, [])
+  const handleSoundChange = useCallback(
+    (enabled: boolean) => {
+      if (enabled) unlockAudio()
+      // Unticking the box must cut a sounding alarm off at once; ticking it
+      // back on must not start one.
+      silenceAlarm()
+      dispatch({ type: "set-sound", enabled })
+    },
+    [silenceAlarm]
+  )
 
   const handleReset = useCallback(() => {
+    silenceAlarm()
     dispatch({ type: "reset" })
     lastBeepRef.current = null
     setCopyStatus({ kind: "idle" })
-  }, [])
+  }, [silenceAlarm])
 
   /** Already confirmed by the selector; starts the chosen workout from scratch. */
   const handleSelectWorkout = useCallback((workoutId: WorkoutId) => {
+    silenceAlarm()
     dispatch({ type: "select-workout", workoutId })
     // The new session has an idle timer, so the clock interval stops on its own;
     // forgetting the last beep keeps a finished rest from sounding again.
     lastBeepRef.current = null
     setCopyStatus({ kind: "idle" })
     setNow(Date.now())
-  }, [])
+  }, [silenceAlarm])
 
   const handleCopy = useCallback(async () => {
     const text = buildResultsText(state)
@@ -250,6 +276,8 @@ export function WorkoutSession({ hydrated }: WorkoutSessionProps) {
           onPauseResume={handlePauseResume}
           onSkip={handleSkip}
           onSoundChange={handleSoundChange}
+          alarmActive={alarmActive}
+          onStopAlarm={silenceAlarm}
         />
       </div>
 

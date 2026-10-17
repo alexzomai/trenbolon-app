@@ -2,8 +2,9 @@ import { act, fireEvent, render, screen, within } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { WorkoutTracker } from "./workout-tracker"
+import { STOP_ALARM_LABEL } from "./rest-timer"
 import { SWITCH_WARNING } from "./workout-selector"
-import { playBeep, unlockAudio } from "@/lib/beep"
+import { startAlarm, stopAlarm, unlockAudio } from "@/lib/beep"
 import { getWorkout, type WorkoutId } from "@/lib/workout-plan"
 import { createInitialState, workoutReducer, type WorkoutState } from "@/lib/workout-state"
 import {
@@ -14,7 +15,8 @@ import {
 
 vi.mock("@/lib/beep", () => ({
   isAudioSupported: vi.fn(() => true),
-  playBeep: vi.fn(() => true),
+  startAlarm: vi.fn(() => true),
+  stopAlarm: vi.fn(),
   unlockAudio: vi.fn(),
   resetAudioForTests: vi.fn(),
 }))
@@ -279,29 +281,29 @@ describe("switching workout", () => {
     expect(screen.getByText("Готов к старту")).toBeInTheDocument()
     expect(timerDisplay()).toHaveTextContent("01:30")
 
-    // The old countdown must not keep ticking or beep after the switch.
+    // The old countdown must not keep ticking or alarm after the switch.
     act(() => {
       vi.advanceTimersByTime(5 * 60_000)
     })
     expect(screen.getByText("Готов к старту")).toBeInTheDocument()
     expect(timerDisplay()).toHaveTextContent("01:30")
-    expect(playBeep).not.toHaveBeenCalled()
+    expect(startAlarm).not.toHaveBeenCalled()
   })
 
-  it("does not replay a finished rest's beep after the switch", () => {
+  it("does not replay a finished rest's alarm after the switch", () => {
     render(<WorkoutTracker />)
     markSet(1, 1)
     act(() => {
       vi.advanceTimersByTime(95_000)
     })
-    expect(playBeep).toHaveBeenCalledTimes(1)
+    expect(startAlarm).toHaveBeenCalledTimes(1)
 
     switchTo("Грудь")
     act(() => {
       vi.advanceTimersByTime(5 * 60_000)
     })
 
-    expect(playBeep).toHaveBeenCalledTimes(1)
+    expect(startAlarm).toHaveBeenCalledTimes(1)
     expect(screen.getByText("Готов к старту")).toBeInTheDocument()
   })
 
@@ -587,26 +589,26 @@ describe("rest timer controls", () => {
 })
 
 describe("sound", () => {
-  it("beeps once when the rest ends naturally", () => {
+  it("starts the alarm once when the rest ends naturally", () => {
     render(<WorkoutTracker />)
     markSet(1, 1)
 
     act(() => {
       vi.advanceTimersByTime(89_000)
     })
-    expect(playBeep).not.toHaveBeenCalled()
+    expect(startAlarm).not.toHaveBeenCalled()
 
     act(() => {
       vi.advanceTimersByTime(1_500)
     })
     expect(screen.getByText("Отдых завершён")).toBeInTheDocument()
     expect(timerDisplay()).toHaveTextContent("00:00")
-    expect(playBeep).toHaveBeenCalledTimes(1)
+    expect(startAlarm).toHaveBeenCalledTimes(1)
 
     act(() => {
       vi.advanceTimersByTime(60_000)
     })
-    expect(playBeep).toHaveBeenCalledTimes(1)
+    expect(startAlarm).toHaveBeenCalledTimes(1)
   })
 
   it("stays silent when the sound checkbox is off", () => {
@@ -618,7 +620,7 @@ describe("sound", () => {
       vi.advanceTimersByTime(95_000)
     })
     expect(screen.getByText("Отдых завершён")).toBeInTheDocument()
-    expect(playBeep).not.toHaveBeenCalled()
+    expect(startAlarm).not.toHaveBeenCalled()
   })
 
   it("finishes correctly after a long throttled gap", () => {
@@ -629,7 +631,116 @@ describe("sound", () => {
       vi.advanceTimersByTime(10 * 60_000)
     })
     expect(screen.getByText("Отдых завершён")).toBeInTheDocument()
-    expect(playBeep).toHaveBeenCalledTimes(1)
+    expect(startAlarm).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe("alarm stop button", () => {
+  /** Mark a set and let its rest run out, so the alarm is sounding. */
+  function endRestNaturally() {
+    markSet(1, 1)
+    act(() => {
+      vi.advanceTimersByTime(95_000)
+    })
+  }
+
+  function stopButton(): HTMLElement | null {
+    return screen.queryByRole("button", { name: STOP_ALARM_LABEL })
+  }
+
+  it("appears only once the alarm sounds and reports it to assistive tech", () => {
+    render(<WorkoutTracker />)
+    expect(stopButton()).not.toBeInTheDocument()
+
+    markSet(1, 1)
+    expect(stopButton()).not.toBeInTheDocument()
+
+    act(() => {
+      vi.advanceTimersByTime(95_000)
+    })
+
+    const button = stopButton()!
+    expect(button).toBeInTheDocument()
+    // 44px: the project's minimum comfortable touch target.
+    expect(button).toHaveClass("h-11")
+    const status = screen.getByText(/Сигнал звучит/)
+    expect(status).toHaveAttribute("role", "status")
+    expect(status).toHaveAttribute("aria-live", "assertive")
+  })
+
+  it("stays hidden when the alarm could not be played", () => {
+    vi.mocked(startAlarm).mockReturnValueOnce(false)
+    render(<WorkoutTracker />)
+    endRestNaturally()
+
+    expect(startAlarm).toHaveBeenCalledTimes(1)
+    expect(stopButton()).not.toBeInTheDocument()
+  })
+
+  it("silences the alarm and dismisses itself when pressed", () => {
+    render(<WorkoutTracker />)
+    endRestNaturally()
+
+    fireEvent.click(stopButton()!)
+
+    expect(stopAlarm).toHaveBeenCalled()
+    expect(stopButton()).not.toBeInTheDocument()
+    // The finished rest itself is untouched: only the sound was dismissed.
+    expect(screen.getByText("Отдых завершён")).toBeInTheDocument()
+    expect(timerDisplay()).toHaveTextContent("00:00")
+    // And it does not come back on later ticks.
+    act(() => {
+      vi.advanceTimersByTime(60_000)
+    })
+    expect(stopButton()).not.toBeInTheDocument()
+    expect(startAlarm).toHaveBeenCalledTimes(1)
+  })
+
+  it.each([
+    ["marking the next set", () => markSet(1, 2)],
+    ["skipping", () => fireEvent.click(screen.getByRole("button", { name: "Пропустить" }))],
+    ["changing the preset", () => fireEvent.click(screen.getByRole("button", { name: "60 с" }))],
+    [
+      "unticking the sound checkbox",
+      () => fireEvent.click(screen.getByLabelText("Звуковой сигнал в конце отдыха")),
+    ],
+    ["resetting", () => fireEvent.click(screen.getByRole("button", { name: "Начать заново" }))],
+    ["switching workout", () => switchTo("Грудь")],
+  ])("%s cancels the alarm", (_label, act_) => {
+    render(<WorkoutTracker />)
+    endRestNaturally()
+    expect(stopButton()).toBeInTheDocument()
+
+    vi.mocked(stopAlarm).mockClear()
+    act_()
+
+    expect(stopAlarm).toHaveBeenCalled()
+    expect(stopButton()).not.toBeInTheDocument()
+    expect(startAlarm).toHaveBeenCalledTimes(1)
+  })
+
+  it("cancels the alarm on unmount", () => {
+    const view = render(<WorkoutTracker />)
+    endRestNaturally()
+
+    vi.mocked(stopAlarm).mockClear()
+    view.unmount()
+
+    expect(stopAlarm).toHaveBeenCalled()
+  })
+
+  it("does not sound again after a reload while the alarm was ringing", () => {
+    const view = render(<WorkoutTracker />)
+    endRestNaturally()
+    expect(startAlarm).toHaveBeenCalledTimes(1)
+    view.unmount()
+
+    vi.mocked(startAlarm).mockClear()
+    render(<WorkoutTracker />)
+
+    expect(screen.getByText("Отдых завершён")).toBeInTheDocument()
+    expect(startAlarm).not.toHaveBeenCalled()
+    expect(stopButton()).not.toBeInTheDocument()
   })
 })
 
@@ -714,7 +825,7 @@ describe("persistence", () => {
 
     expect(screen.getByText("Идёт отдых")).toBeInTheDocument()
     expect(timerDisplay()).toHaveTextContent("01:00")
-    expect(playBeep).not.toHaveBeenCalled()
+    expect(startAlarm).not.toHaveBeenCalled()
 
     act(() => {
       vi.advanceTimersByTime(10_000)
@@ -722,7 +833,7 @@ describe("persistence", () => {
     expect(timerDisplay()).toHaveTextContent("00:50")
   })
 
-  it("restores an expired timer as finished without replaying the beep", () => {
+  it("restores an expired timer as finished without replaying the alarm", () => {
     seedStorage(savedSession("pull", "lat-pulldown-wide"))
 
     vi.setSystemTime(T0 + 10 * 60_000)
@@ -730,7 +841,7 @@ describe("persistence", () => {
 
     expect(screen.getByText("Отдых завершён")).toBeInTheDocument()
     expect(timerDisplay()).toHaveTextContent("00:00")
-    expect(playBeep).not.toHaveBeenCalled()
+    expect(startAlarm).not.toHaveBeenCalled()
   })
 
   it("restores a paused timer with its frozen remainder", () => {

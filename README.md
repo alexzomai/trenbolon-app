@@ -88,8 +88,8 @@ There is only **one session at a time**. Picking another workout therefore
   selection and a running timer.
 * `Продолжить` switches atomically: marks, edited weights and reps, the chosen
   set count, the rest preset, the sound preference and the timer all go back to
-  the chosen workout's defaults. A running rest stops; nothing auto-starts and
-  no finished rest beeps again.
+  the chosen workout's defaults. A running rest stops, a sounding alarm is
+  silenced; nothing auto-starts and no finished rest alarms again.
 * Switching back later is a **fresh** workout — nothing is kept per workout.
 * Picking the workout that is already selected does nothing and asks nothing.
 
@@ -145,16 +145,32 @@ tab therefore cannot drift, and returning to the tab snaps straight to the truth
 
 ### Sound
 
-A short two-tone beep, synthesised with the Web Audio API — no audio file is
-fetched. On by default.
+An **alarm**, not a notification: repeating bursts of four alternating
+880/1175 Hz pulses (square/triangle, each ramped at the edges so there is no
+click), synthesised with the Web Audio API — no audio file is fetched. On by
+default. Peak gain is bounded at 0.25, so four overlapping-in-time pulses cannot
+clip.
 
-* It plays **only** when a rest ends naturally while the page is open. Restoring
-  an already-expired timer after a reload never replays an overdue beep, and
-  neither does switching workout.
+* It keeps sounding **until it is stopped**. A 44px `Остановить сигнал` button
+  appears under the timer while it rings, with a `role="status"` line next to it
+  for assistive tech. Pressing it silences the alarm at once and leaves the
+  finished rest itself untouched.
+* The alarm is also cancelled by: marking the next set, `Пропустить`, choosing
+  another preset, unticking the sound checkbox, `Начать заново`, a confirmed
+  workout switch, and unmount. Cancellation bumps a generation counter, so a
+  pending repeat — or an `AudioContext.resume()` that only settles after the
+  stop — can never start a burst late, and bursts never overlap.
+* It starts **only** when a rest ends naturally while the page is open.
+  Restoring an already-expired timer after a reload never replays an overdue
+  alarm, and neither does switching workout. The ringing state is transient
+  component state: it is never persisted, so a reload is always silent.
 * The `AudioContext` is unlocked from the click that can lead to a rest ending,
   since browsers only allow audio to start from a user gesture.
 * On a browser without Web Audio the checkbox is disabled and says so; nothing
-  throws.
+  throws, and the stop button never appears.
+* It is still only page audio. Device volume, a silent switch, and a
+  backgrounded or locked browser can all suspend playback — the ⓘ panel says so
+  rather than promising OS-alarm reliability.
 
 ### Copy and reset
 
@@ -241,15 +257,16 @@ npm run typecheck   # tsc --noEmit
 
 ### Tests
 
-[Vitest](https://vitest.dev) + Testing Library on jsdom, in seven files:
+[Vitest](https://vitest.dev) + Testing Library on jsdom, in eight files:
 
 | File | Covers |
 |------|--------|
 | `lib/workout-plan.test.ts` | the three plans against the source note: seven exercises each, order and exact names, 3 × 12–15 throughout, blank weights, 21 sets a day, unique ids for the two hyperextension rows, and the absence of the superseded exercises, weights and hints |
-| `lib/workout-state.test.ts` | the pure reducer: progress counting and rounding, set toggling, every timer transition, preset changes, throttled-tab recovery, the beep flag, switching workout, reset, results text |
+| `lib/workout-state.test.ts` | the pure reducer: progress counting and rounding, set toggling, every timer transition, preset changes, throttled-tab recovery, the end-of-rest flag, switching workout, reset, results text |
+| `lib/beep.test.ts` | the audio scheduler against a fake `AudioContext`: burst shape (waveforms, pitches, sequential non-overlapping pulses, ramped and bounded gain), repetition, stop silencing and cancelling repeats, no overlap on a double start, suspended-context resume and the late-resume-after-stop case, and the no-Web-Audio path |
 | `lib/variable-sets.test.ts` | the variable-set-count capability against a fixture plan: defaults, lowered counts, parked marks, rejected counts, results text and the lenient persisted set count |
 | `lib/workout-storage.test.ts` | serialisation round-trip of the selected workout, every corrupt/incompatible-record case — including a real v2 record of the superseded plan being rejected outright — restoring running / paused / expired / idle timers, unavailable storage, reset |
-| `components/workout-tracker.test.tsx` | the wired UI: the selector and its confirm/cancel/Escape paths, switching resetting state and timer, marking sets, the live countdown, pause/resume/skip, presets, sound, editing fields, persistence across a remount, corrupt-data fallback, reset, clipboard success and failure |
+| `components/workout-tracker.test.tsx` | the wired UI: the selector and its confirm/cancel/Escape paths, switching resetting state and timer, marking sets, the live countdown, pause/resume/skip, presets, sound, the alarm stop button and every path that cancels it, editing fields, persistence across a remount, corrupt-data fallback, reset, clipboard success and failure |
 | `components/variable-sets.test.tsx` | the set-count picker and the ⓘ panel's explanation of it, rendered from fixture props |
 | `components/workout-tracker.hydration.test.tsx` | the real `renderToString` → `hydrateRoot` path: default markup on the server, no hydration mismatch, saved state adopted after hydration without being clobbered |
 

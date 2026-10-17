@@ -20,7 +20,12 @@ interface RestTimerProps {
   onPauseResume: () => void
   onSkip: () => void
   onSoundChange: (enabled: boolean) => void
+  /** True only while the end-of-rest alarm is actually sounding. */
+  alarmActive: boolean
+  onStopAlarm: () => void
 }
+
+export const STOP_ALARM_LABEL = "Остановить сигнал"
 
 export function RestTimer({
   timer,
@@ -31,6 +36,8 @@ export function RestTimer({
   onPauseResume,
   onSkip,
   onSoundChange,
+  alarmActive,
+  onStopAlarm,
 }: RestTimerProps) {
   const headingId = useId()
   const soundId = useId()
@@ -112,7 +119,21 @@ export function RestTimer({
         </Button>
       </div>
 
-      <div className="mt-4 flex flex-wrap items-center gap-2">
+      {alarmActive && (
+        <Button
+          type="button"
+          onClick={onStopAlarm}
+          className="mt-2 h-11 w-full font-normal"
+        >
+          {STOP_ALARM_LABEL}
+        </Button>
+      )}
+
+      <p role="status" aria-live="assertive" className="mt-2 min-h-5 text-center text-sm">
+        {alarmActive && "Сигнал звучит — нажми «Остановить сигнал»."}
+      </p>
+
+      <div className="mt-2 flex flex-wrap items-center gap-2">
         <Checkbox
           id={soundId}
           checked={soundEnabled}
