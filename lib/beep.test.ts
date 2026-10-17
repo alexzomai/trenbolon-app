@@ -250,13 +250,25 @@ describe("stopAlarm", () => {
 
   it("keeps a late resume from starting the alarm after a stop", async () => {
     FakeAudioContext.initialState = "suspended"
-    expect(startAlarm()).toBe(true)
+    expect(startAlarm()).toBe(false)
     expect(ctx().oscillators).toHaveLength(0)
 
     stopAlarm()
     ctx().releaseResume!()
     await vi.runAllTimersAsync()
 
+    expect(ctx().oscillators).toHaveLength(0)
+  })
+
+  it("never announces a pending resume as audible, nor plays an overdue resume", async () => {
+    FakeAudioContext.initialState = "suspended"
+    const onStarted = vi.fn()
+    expect(startAlarm(onStarted, Date.now() + 2000)).toBe(false)
+    expect(onStarted).not.toHaveBeenCalled()
+    vi.advanceTimersByTime(3000)
+    ctx().releaseResume!()
+    await Promise.resolve(); await Promise.resolve()
+    expect(onStarted).not.toHaveBeenCalled()
     expect(ctx().oscillators).toHaveLength(0)
   })
 

@@ -89,6 +89,8 @@ function savedSession(workoutId: WorkoutId, exerciseId: string): WorkoutState {
 }
 
 beforeEach(() => {
+  // This suite exercises Web Audio fallback; media playback has its own suite.
+  vi.spyOn(URL, "createObjectURL").mockImplementation(() => { throw new Error("media unavailable") })
   window.localStorage.clear()
   // Storage health is module-level state, so a failure observed by one test
   // must not leak into the next.
@@ -294,7 +296,7 @@ describe("switching workout", () => {
     render(<WorkoutTracker />)
     markSet(1, 1)
     act(() => {
-      vi.advanceTimersByTime(95_000)
+      vi.advanceTimersByTime(90_000)
     })
     expect(startAlarm).toHaveBeenCalledTimes(1)
 
@@ -617,7 +619,7 @@ describe("sound", () => {
     markSet(1, 1)
 
     act(() => {
-      vi.advanceTimersByTime(95_000)
+      vi.advanceTimersByTime(90_000)
     })
     expect(screen.getByText("Отдых завершён")).toBeInTheDocument()
     expect(startAlarm).not.toHaveBeenCalled()
@@ -631,7 +633,7 @@ describe("sound", () => {
       vi.advanceTimersByTime(10 * 60_000)
     })
     expect(screen.getByText("Отдых завершён")).toBeInTheDocument()
-    expect(startAlarm).toHaveBeenCalledTimes(1)
+    expect(startAlarm).not.toHaveBeenCalled()
   })
 })
 
@@ -640,7 +642,7 @@ describe("alarm stop button", () => {
   function endRestNaturally() {
     markSet(1, 1)
     act(() => {
-      vi.advanceTimersByTime(95_000)
+      vi.advanceTimersByTime(90_000)
     })
   }
 
@@ -656,7 +658,7 @@ describe("alarm stop button", () => {
     expect(stopButton()).not.toBeInTheDocument()
 
     act(() => {
-      vi.advanceTimersByTime(95_000)
+      vi.advanceTimersByTime(90_000)
     })
 
     const button = stopButton()!

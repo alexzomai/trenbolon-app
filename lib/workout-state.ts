@@ -422,7 +422,8 @@ export function workoutReducer(state: WorkoutState, action: WorkoutAction): Work
           remainingMs: 0,
         },
         // Only a live tick may request a beep.
-        beepAt: state.soundEnabled ? action.now : state.beepAt,
+        beepAt: state.soundEnabled && action.now - timer.deadline <= 2000
+          ? timer.deadline : state.beepAt,
       }
     }
 

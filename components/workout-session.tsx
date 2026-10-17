@@ -13,6 +13,8 @@ import { WorkoutSelector } from "@/components/workout-selector"
 import { isAudioSupported, startAlarm, stopAlarm, unlockAudio } from "@/lib/beep"
 import { type SavedWorkout } from "@/lib/saved-workouts"
 import { isWorkoutId, type WorkoutId } from "@/lib/workout-plan"
+import { RestAudio, FRESH_ALARM_MS, type RestAudioStatus } from "@/lib/rest-audio"
+import { type WorkoutAction } from "@/lib/workout-state"
 import {
   buildResultsText,
   countCompleted,
@@ -62,12 +64,25 @@ export function WorkoutSession({ hydrated }: WorkoutSessionProps) {
   const [now, setNow] = useState(() => (hydrated ? Date.now() : 0))
   // Fixed for the lifetime of the instance; optimistic on the server so the
   // prerendered HTML never claims audio is missing.
-  const [audioSupported] = useState(() => (hydrated ? isAudioSupported() : true))
+  const [audioSupported] = useState(() => (hydrated ? isAudioSupported() || typeof Audio !== "undefined" : true))
   const [copyStatus, setCopyStatus] = useState<CopyStatus>({ kind: "idle" })
   // Transient UI only: whether the repeating alarm is sounding right now. It is
   // never persisted, so a reload never shows a stop button for an old rest.
   const [alarmActive, setAlarmActive] = useState(false)
   const lastBeepRef = useRef<number | null>(null)
+  const [audioStatus, setAudioStatus] = useState<RestAudioStatus>("idle")
+  const [restAudio] = useState(() => new RestAudio(setAudioStatus))
+
+  // play() must happen inside the gesture, not in a React effect.
+  const dispatchTimer = useCallback((action: WorkoutAction) => {
+    const next = workoutReducer(state, action)
+    if (next.soundEnabled && next.timer.status === "running" && next.timer.deadline !== null) {
+      restAudio.start(next.timer.deadline)
+    } else {
+      restAudio.stop()
+    }
+    dispatch(action)
+  }, [state, restAudio])
 
   // A failed write flips a flag inside the storage module and notifies here,
   // so the warning appears without any effect calling setState.
@@ -96,22 +111,27 @@ export function WorkoutSession({ hydrated }: WorkoutSessionProps) {
 
   // --- clock --------------------------------------------------------------
   useEffect(() => {
-    if (state.timer.status !== "running") return
+    if (state.timer.status !== "running" && audioStatus !== "playing") return
 
     // `now` is already current whenever a timer starts: every path that starts
     // one sets it from the click handler, and a restored one seeds it above.
-    const sync = () => setNow(Date.now())
+    const sync = () => {
+      restAudio.reconcile()
+      setNow(Date.now())
+    }
     const interval = window.setInterval(sync, TICK_INTERVAL_MS)
     // Coming back to a throttled/hidden tab must snap straight to the truth.
     document.addEventListener("visibilitychange", sync)
     window.addEventListener("focus", sync)
+    window.addEventListener("pageshow", sync)
 
     return () => {
       window.clearInterval(interval)
       document.removeEventListener("visibilitychange", sync)
       window.removeEventListener("focus", sync)
+      window.removeEventListener("pageshow", sync)
     }
-  }, [state.timer.status])
+  }, [state.timer.status, restAudio, audioStatus])
 
   const { deadline, status } = state.timer
   useEffect(() => {
@@ -124,8 +144,9 @@ export function WorkoutSession({ hydrated }: WorkoutSessionProps) {
   /** Silence the alarm and hide its stop button. Safe to call when idle. */
   const silenceAlarm = useCallback(() => {
     stopAlarm()
+    restAudio.stop()
     setAlarmActive(false)
-  }, [])
+  }, [restAudio])
 
   // The reducer only sets `beepAt` for a rest that ended naturally while sound
   // was on, so a muted session and a restored expired timer stay silent.
@@ -133,11 +154,18 @@ export function WorkoutSession({ hydrated }: WorkoutSessionProps) {
     if (state.beepAt === null) return
     if (lastBeepRef.current === state.beepAt) return
     lastBeepRef.current = state.beepAt
-    setAlarmActive(startAlarm())
-  }, [state.beepAt])
+    restAudio.reconcile()
+    if (restAudio.ownsDeadline(state.beepAt)) return
+    if (Date.now() - state.beepAt <= FRESH_ALARM_MS) {
+      // Reflect the external audio engine's actual synchronous result. Pending
+      // resume reports success separately, never via an optimistic stop button.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setAlarmActive(startAlarm(() => setAlarmActive(true), state.beepAt + FRESH_ALARM_MS))
+    }
+  }, [state.beepAt, restAudio])
 
   // Leaving the page must not leave oscillators or a repeat timer behind.
-  useEffect(() => stopAlarm, [])
+  useEffect(() => () => { stopAlarm(true); restAudio.stop() }, [restAudio])
 
   // --- handlers -----------------------------------------------------------
   const handleToggleSet = useCallback((exerciseId: string, setIndex: number) => {
@@ -146,32 +174,32 @@ export function WorkoutSession({ hydrated }: WorkoutSessionProps) {
     unlockAudio()
     // A new set means a new countdown: the previous rest's alarm is over.
     silenceAlarm()
-    dispatch({ type: "toggle-set", exerciseId, setIndex, now: Date.now() })
+    dispatchTimer({ type: "toggle-set", exerciseId, setIndex, now: Date.now() })
     setNow(Date.now())
-  }, [silenceAlarm])
+  }, [silenceAlarm, dispatchTimer])
 
   const handleSelectDuration = useCallback((seconds: number) => {
     unlockAudio()
     silenceAlarm()
-    dispatch({ type: "select-duration", seconds, now: Date.now() })
+    dispatchTimer({ type: "select-duration", seconds, now: Date.now() })
     setNow(Date.now())
-  }, [silenceAlarm])
+  }, [silenceAlarm, dispatchTimer])
 
   const handlePauseResume = useCallback(() => {
     unlockAudio()
     const timestamp = Date.now()
-    dispatch(
+    dispatchTimer(
       state.timer.status === "paused"
         ? { type: "resume", now: timestamp }
         : { type: "pause", now: timestamp }
     )
     setNow(timestamp)
-  }, [state.timer.status])
+  }, [state.timer.status, dispatchTimer])
 
   const handleSkip = useCallback(() => {
     silenceAlarm()
-    dispatch({ type: "skip" })
-  }, [silenceAlarm])
+    dispatchTimer({ type: "skip" })
+  }, [silenceAlarm, dispatchTimer])
 
   const handleSoundChange = useCallback(
     (enabled: boolean) => {
@@ -179,28 +207,28 @@ export function WorkoutSession({ hydrated }: WorkoutSessionProps) {
       // Unticking the box must cut a sounding alarm off at once; ticking it
       // back on must not start one.
       silenceAlarm()
-      dispatch({ type: "set-sound", enabled })
+      dispatchTimer({ type: "set-sound", enabled })
     },
-    [silenceAlarm]
+    [silenceAlarm, dispatchTimer]
   )
 
   const handleReset = useCallback(() => {
     silenceAlarm()
-    dispatch({ type: "reset" })
+    dispatchTimer({ type: "reset" })
     lastBeepRef.current = null
     setCopyStatus({ kind: "idle" })
-  }, [silenceAlarm])
+  }, [silenceAlarm, dispatchTimer])
 
   /** Already confirmed by the selector; starts the chosen workout from scratch. */
   const handleSelectWorkout = useCallback((workoutId: WorkoutId) => {
     silenceAlarm()
-    dispatch({ type: "select-workout", workoutId })
+    dispatchTimer({ type: "select-workout", workoutId })
     // The new session has an idle timer, so the clock interval stops on its own;
     // forgetting the last beep keeps a finished rest from sounding again.
     lastBeepRef.current = null
     setCopyStatus({ kind: "idle" })
     setNow(Date.now())
-  }, [silenceAlarm])
+  }, [silenceAlarm, dispatchTimer])
 
   /** Already confirmed by the library; starts the saved workout from scratch. */
   const handleStartSaved = useCallback((saved: SavedWorkout) => {
@@ -291,9 +319,20 @@ export function WorkoutSession({ hydrated }: WorkoutSessionProps) {
           onPauseResume={handlePauseResume}
           onSkip={handleSkip}
           onSoundChange={handleSoundChange}
-          alarmActive={alarmActive}
+          alarmActive={alarmActive || restAudio.isAlarm(now)}
           onStopAlarm={silenceAlarm}
         />
+        <p className="mt-2 text-xs text-muted-foreground">
+          При блокировке экрана или сворачивании браузера звук может прерваться.
+          Сначала запусти отдых нажатием. Не полагайся на фоновый сигнал для важных напоминаний.
+          Сигнал медиаплеера длится до 30 секунд.
+        </p>
+        {(audioStatus === "blocked" || audioStatus === "interrupted") && (
+          <p role="alert" className="mt-2 text-sm text-destructive">
+            Браузер остановил звук или запретил его запуск. Таймер продолжает идти.
+            Чтобы снова включить звук во время отдыха, нажми «Пауза», затем «Продолжить».
+          </p>
+        )}
       </div>
 
       {complete && (

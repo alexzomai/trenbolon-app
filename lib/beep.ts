@@ -112,25 +112,26 @@ function playBurst(ctx: AudioContext): void {
   })
 }
 
-function runCycle(ctx: AudioContext, ownGeneration: number): void {
-  if (ownGeneration !== generation) return
+function runCycle(ctx: AudioContext, ownGeneration: number): boolean {
+  if (ownGeneration !== generation) return false
   try {
     playBurst(ctx)
   } catch {
     stopAlarm()
-    return
+    return false
   }
   repeatTimer = window.setTimeout(() => {
     repeatTimer = null
     runCycle(ctx, ownGeneration)
   }, CYCLE_MS)
+  return true
 }
 
 /**
  * Start the repeating end-of-rest alarm. Any alarm already sounding is stopped
  * first, so bursts never overlap. Returns false when nothing could be played.
  */
-export function startAlarm(): boolean {
+export function startAlarm(onStarted?: () => void, expiresAt = Infinity): boolean {
   stopAlarm()
   try {
     const Ctor = getAudioContextConstructor()
@@ -140,8 +141,7 @@ export function startAlarm(): boolean {
     const ownGeneration = generation
 
     if (ctx.state === "running") {
-      runCycle(ctx, ownGeneration)
-      return true
+      return Date.now() <= expiresAt && runCycle(ctx, ownGeneration)
     }
 
     if (ctx.state === "suspended") {
@@ -152,10 +152,12 @@ export function startAlarm(): boolean {
         .then(() => {
           if (ownGeneration !== generation) return
           if (ctx.state !== "running") return
-          runCycle(ctx, ownGeneration)
+          if (Date.now() > expiresAt) return
+          if (runCycle(ctx, ownGeneration)) onStarted?.()
         })
         .catch(() => undefined)
-      return true
+      // Pending resume is not evidence that anything is sounding.
+      return false
     }
 
     return false
@@ -165,7 +167,7 @@ export function startAlarm(): boolean {
 }
 
 /** Silence the alarm immediately and cancel every scheduled repeat. */
-export function stopAlarm(): void {
+export function stopAlarm(release = false): void {
   generation += 1
   if (repeatTimer !== null) {
     window.clearTimeout(repeatTimer)
@@ -189,6 +191,10 @@ export function stopAlarm(): void {
     }
   }
   liveVoices.clear()
+  if (release && context) {
+    try { void context.close().catch(() => undefined) } catch { /* already closed */ }
+    context = null
+  }
 }
 
 /** Test seam: forget the cached context and drop any pending audio. */
