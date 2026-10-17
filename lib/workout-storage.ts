@@ -31,13 +31,15 @@ import {
 export const STORAGE_KEY = "ui-workout:state"
 
 /**
- * 2 — one selected workout out of three.
+ * 3 — the current plan: three days of seven exercises, 3×12–15, no weights.
  *
- * Version 1 held the single hard-coded chest/shoulders plan with no workout id.
- * Switching workouts now discards the session by design, so a v1 record is
- * simply ignored like any other incompatible one rather than migrated.
+ * Version 1 held the single hard-coded chest/shoulders plan with no workout id;
+ * version 2 the previous three-day plan, whose saved weights and rep ranges
+ * would otherwise outlive it. There are no migrations: switching workouts
+ * already discards the session by design, so an older record is simply ignored
+ * like any other incompatible one.
  */
-export const SCHEMA_VERSION = 2
+export const SCHEMA_VERSION = 3
 
 interface PersistedState {
   version: number

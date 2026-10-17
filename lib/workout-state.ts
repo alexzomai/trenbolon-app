@@ -432,7 +432,7 @@ const NUMERIC_ENTRY = /^[\d\s.,–—-]+$/
  */
 export function buildResultsText(state: WorkoutState): string {
   const workout = workoutOf(state)
-  const lines: string[] = [`${workout.title} (${workout.description})`]
+  const lines: string[] = [workout.title]
 
   workout.exercises.forEach((exercise, index) => {
     const sets = setsFor(state, exercise)

@@ -14,62 +14,69 @@ components on Radix primitives.
 
 ### The plans
 
-Three workouts, six exercises each, rotated every other day:
-**Спина → Грудь → Ноги → Спина → …** The back day totals 19 sets, the chest day
-18 (17 if the butterfly is set to two) and the legs day 18.
+Three workouts — `Спина`, `Грудь`, `Ноги` — of **seven exercises each**, every
+one of them **3 × 12–15** with **no prescribed weight**. Each day therefore
+totals **21 sets**.
 
 The plans are a **static local snapshot** of the Obsidian note
 «План тренировок.md», transcribed into `lib/workout-plan.ts`. There is no live
 sync: the app never talks to Obsidian, holds no vault credentials and makes no
 network requests at runtime. Changing the plan means editing that file.
 
-#### Спина (спина, бицепс, задние дельты)
+#### Спина
 
-| # | Exercise | Sets × reps | Weight, kg | Hint |
-|---|----------|-------------|------------|------|
-| 1 | Тяга верхнего блока широким хватом | 4 × 8–12 | — | |
-| 2 | Горизонтальная тяга | 3 × 10–12 | — | блок сидя, к животу |
-| 3 | Тяга в наклоне | 3 × 10 | — | или нижний блок узким хватом |
-| 4 | Разведение гантелей в наклоне | 3 × 12–15 | — | задняя дельта, лёгкий вес |
-| 5 | Шраги со штангой/гантелями | 3 × 12 | — | |
-| 6 | Бицепс стоя | 3 × 10 | 10 | слегка согнутые колени, руки прямые, чуть выведены вперёд; гантели |
+| # | Exercise | Sets × reps | Weight |
+|---|----------|-------------|--------|
+| 1 | Тяга верхнего блока широким хватом | 3 × 12–15 | — |
+| 2 | Горизонтальная тяга | 3 × 12–15 | — |
+| 3 | Тяга в наклоне / нижний блок узким хватом | 3 × 12–15 | — |
+| 4 | Разведение гантелей в наклоне | 3 × 12–15 | — |
+| 5 | Шраги со штангой/гантелями | 3 × 12–15 | — |
+| 6 | Бицепс стоя | 3 × 12–15 | — |
+| 7 | Гиперэкстензия на поясницу | 3 × 12–15 | — |
 
-#### Грудь (грудь, плечи, трицепс)
+#### Грудь
 
-| # | Exercise | Sets × reps | Weight, kg | Hint |
-|---|----------|-------------|------------|------|
-| 1 | Жим лёжа | 3 × 8–10 | 10–13 | |
-| 2 | Жим на наклонной | 3 × 10 | — | |
-| 3 | Жим гантелей сидя | 3 × 10–12 | — | плечи |
-| 4 | Разведение гантелей в стороны стоя | 3 × 12–15 | — | боковая дельта |
-| 5 | Бабочка | **2–3** × 10–12 | 42–45 | по плану 2–3 подхода |
-| 6 | Трицепс на «бычьих яйцах» | 3 × до отказа | 20 | начинать с 20 кг, понижать по 5 кг |
+| # | Exercise | Sets × reps | Weight |
+|---|----------|-------------|--------|
+| 1 | Жим лёжа | 3 × 12–15 | — |
+| 2 | Жим на наклонной | 3 × 12–15 | — |
+| 3 | Жим гантелей сидя | 3 × 12–15 | — |
+| 4 | Разведение гантелей в стороны стоя | 3 × 12–15 | — |
+| 5 | Бабочка | 3 × 12–15 | — |
+| 6 | Трицепс на «бычьих яйцах» | 3 × 12–15 | — |
+| 7 | Подтягивания | 3 × 12–15 | — |
 
-#### Ноги (ноги и пресс)
+#### Ноги
 
-| # | Exercise | Sets × reps | Weight | Hint |
-|---|----------|-------------|--------|------|
-| 1 | Жим ногами | 3 × 10–12 | — | или Смит-приседания |
-| 2 | Сгибание ног лежа на животе | 3 × 12 | — | бицепс бедра |
-| 3 | Разгибание голени | 3 × 12 | — | квадрицепс |
-| 4 | Подъём на икры стоя | 3 × 15 | — | |
-| 5 | Пресс на наклонной скамье | 3 × 10–15 | свой вес | вниз головой |
-| 6 | Планка или скручивания на блоке | 3 × до отказа | — | |
+| # | Exercise | Sets × reps | Weight |
+|---|----------|-------------|--------|
+| 1 | Жим ногами или Смит-приседания | 3 × 12–15 | — |
+| 2 | Сгибание ног лёжа | 3 × 12–15 | — |
+| 3 | Разгибание голени | 3 × 12–15 | — |
+| 4 | Подъём на икры стоя | 3 × 12–15 | — |
+| 5 | Пресс на наклонной скамье | 3 × 12–15 | — |
+| 6 | Сгибание шеи лёжа на спине с блином | 3 × 12–15 | — |
+| 7 | Гиперэкстензия на поясницу | 3 × 12–15 | — |
 
-Weight and reps are free-form text, so ranges (`8–12`), single numbers, empty
-values and words (`до отказа`, `свой вес`) are all valid. Where the source
-prescribes no weight the field stays empty rather than inventing one. Technique,
-alternatives and drop-set instructions live in the ⓘ panel (see below) rather
-than on the cards.
+The source prescribes no weights at all, not even «свой вес», so every weight
+field starts empty rather than inventing a figure; the user fills them in.
+Weight and reps remain free-form text, so ranges (`12–15`), single numbers,
+empty values and words (`до отказа`) are all valid. Where the note names an
+alternative it is part of the exercise name, so it shows on the card itself.
+
+Гиперэкстензия на поясницу closes both the back and the legs day; the two rows
+carry distinct ids (`back-hyperextension`, `legs-hyperextension`) so session
+keys stay globally unique.
 
 ### Choosing a workout — switching resets everything
 
 The selector sits at the top as a three-choice radio group (`Спина`, `Грудь`,
-`Ноги`) and the heading below it names the day. The muscle groups and the
-rotation note moved into the ⓘ panel.
+`Ноги`) and the heading below it names the day.
 
-Internally the workouts keep their original ids (`pull`, `push`, `legs`), so a
-saved session survives the renaming.
+Internally the workouts keep their ids (`pull`, `push`, `legs`), and unchanged
+exercises keep theirs, so the state and storage keys are stable across plan
+edits.
 
 There is only **one session at a time**. Picking another workout therefore
 **discards the current one**, which is why it is confirmed first:
@@ -88,20 +95,22 @@ There is only **one session at a time**. Picking another workout therefore
 
 ### Variable set count
 
-The butterfly is prescribed as `2–3 × 10–12`. It defaults to **3** and carries a
-small 2/3 radio group, labelled `Подходов`. The chosen count is what the card,
-the total, the progress bar, the completion notice and the copied summary all
-use (the chest day is 18 sets at three, 17 at two).
+A capability, not something the current plan uses: **every exercise of the
+current note has a fixed three sets**, so no card shows a set-count picker.
 
-Lowering the count does not delete the third mark: it is parked, the ⓘ panel
-says so (`Бабочка: отмечено подходов сверх выбранных — 1`), and raising the
-count back to three counts it again.
+Should an exercise again be prescribed as a range (`2–3 × …`), it gains a small
+radio group labelled `Подходов`, and the chosen count is what the card, the
+total, the progress bar, the completion notice and the copied summary all use.
+Lowering the count does not delete the marks beyond it: they are parked, the ⓘ
+panel says so (`…: отмечено подходов сверх выбранных — 1`), and raising the
+count counts them again. This is covered by fixture-driven tests
+(`lib/variable-sets.test.ts`, `components/variable-sets.test.tsx`).
 
 ### The ⓘ panel
 
-Every explanation — muscle groups, rotation, how to mark sets, the timer,
-persistence, reset and switching, the planned set ranges with any parked marks,
-and the per-exercise technique hints — lives in a single modal opened by the
+Every explanation — how to mark sets, the timer, persistence, reset and
+switching, and any planned set ranges with their parked marks — lives in a
+single modal opened by the
 44 × 44 ⓘ button beside the heading (`Информация о тренировке`). It reflects the
 selected workout, scrolls inside a `80dvh` cap, closes on `Закрыть`, Escape or
 the overlay with focus returned to the button, and touches neither state,
@@ -112,7 +121,7 @@ transient notices and the actionable storage warning.
 
 * Each `Подход N` button toggles a set. Done sets turn green with a check mark
   and expose `aria-pressed`.
-* Every card shows `<sets> × <reps>` and its own completed count (`2/4`).
+* Every card shows `<sets> × <reps>` and its own completed count (`2/3`).
 * The header shows `X / <total>`, a whole-number percentage and a green bar.
 * When every set that counts is marked, a completion notice appears.
 
@@ -155,7 +164,7 @@ fetched. On by default.
   text is copied as written: no `кг` is appended to `свой вес`, no `повт.` to
   `до отказа`.
 * `Начать заново` resets the **current** workout: marks cleared, the plan's
-  weights, reps and set counts restored, timer idle at 90 с, sound back on. It
+  blank weights and `12–15` reps restored, timer idle at 90 с, sound back on. It
   does not change which workout is selected and asks no confirmation.
 
 ### Persistence
@@ -169,10 +178,12 @@ preference and timer (including a running timer's deadline or a paused timer's
 frozen remainder). There is no per-workout history, because switching workout
 throws the session away by design.
 
-* **Versioned schema.** The record carries a `version` (currently `2`); anything
-  from another version is ignored. Version 1 held the single hard-coded
-  chest/shoulders plan with no workout id — such a record is simply dropped and
-  the tracker starts fresh on the back day, rather than being migrated.
+* **Versioned schema.** The record carries a `version` (currently `3`); anything
+  from another version is ignored, and there are **no migrations**. Version 1
+  held the single hard-coded chest/shoulders plan with no workout id; version 2
+  the previous three-day plan, whose saved weights and rep ranges would
+  otherwise have outlived it. Such a record is simply dropped and the tracker
+  starts fresh on the back day with the current plan's defaults.
 * **Validated on read.** Malformed JSON, wrong types, an unknown workout id, a
   set array whose length no longer matches the plan, a running timer with no
   deadline — any of these falls back to a fresh workout instead of crashing. The
@@ -196,9 +207,9 @@ throws the session away by design.
 
 ### Accessibility and layout
 
-* The workout selector and the 2/3 set choice are Radix single toggle groups, so
-  they are `radiogroup`s of `radio`s with roving arrow-key focus and
-  `aria-checked`.
+* The workout selector — and a set-count choice, where a plan offers one — are
+  Radix single toggle groups, so they are `radiogroup`s of `radio`s with roving
+  arrow-key focus and `aria-checked`.
 * The switch confirmation is a Radix alert dialog: `role="alertdialog"`, focus
   trapped and restored, labelled by its title and description, Escape closes it.
 * Toggles expose `aria-pressed`; progress and timer status use `aria-live`;
@@ -206,8 +217,8 @@ throws the session away by design.
 * Everything is reachable and operable by keyboard with visible focus rings.
 * Max content width 760 px, centred. Mobile-first with 16 px margins: no
   horizontal overflow at 360 px. Set buttons are 44 px tall and never shrink —
-  three fit on one row, and the four of the first exercise of the back day wrap into two
-  rows of two (four across from `sm` upwards).
+  the three of every exercise fit on one row (four, should a plan ever prescribe
+  them, wrap into two rows of two below `sm`).
 * Pure black background, system font stack only — no fonts are fetched over the
   network.
 
@@ -230,14 +241,16 @@ npm run typecheck   # tsc --noEmit
 
 ### Tests
 
-[Vitest](https://vitest.dev) + Testing Library on jsdom, in five files:
+[Vitest](https://vitest.dev) + Testing Library on jsdom, in seven files:
 
 | File | Covers |
 |------|--------|
-| `lib/workout-plan.test.ts` | the three plans against the source note: six exercises each, order, sets, reps, weights, hints, totals 19/18/18, unique ids |
-| `lib/workout-state.test.ts` | the pure reducer: progress counting and rounding, set toggling, the variable set count and its parked marks, every timer transition, preset changes, throttled-tab recovery, the beep flag, switching workout, reset, results text |
-| `lib/workout-storage.test.ts` | serialisation round-trip of the selected workout, every corrupt/incompatible-record case (including the superseded v1 schema), lenient set counts, restoring running / paused / expired / idle timers, unavailable storage, reset |
-| `components/workout-tracker.test.tsx` | the wired UI: the selector and its confirm/cancel/Escape paths, switching resetting state and timer, variable sets, marking sets, the live countdown, pause/resume/skip, presets, sound, editing fields, persistence across a remount, corrupt-data fallback, reset, clipboard success and failure |
+| `lib/workout-plan.test.ts` | the three plans against the source note: seven exercises each, order and exact names, 3 × 12–15 throughout, blank weights, 21 sets a day, unique ids for the two hyperextension rows, and the absence of the superseded exercises, weights and hints |
+| `lib/workout-state.test.ts` | the pure reducer: progress counting and rounding, set toggling, every timer transition, preset changes, throttled-tab recovery, the beep flag, switching workout, reset, results text |
+| `lib/variable-sets.test.ts` | the variable-set-count capability against a fixture plan: defaults, lowered counts, parked marks, rejected counts, results text and the lenient persisted set count |
+| `lib/workout-storage.test.ts` | serialisation round-trip of the selected workout, every corrupt/incompatible-record case — including a real v2 record of the superseded plan being rejected outright — restoring running / paused / expired / idle timers, unavailable storage, reset |
+| `components/workout-tracker.test.tsx` | the wired UI: the selector and its confirm/cancel/Escape paths, switching resetting state and timer, marking sets, the live countdown, pause/resume/skip, presets, sound, editing fields, persistence across a remount, corrupt-data fallback, reset, clipboard success and failure |
+| `components/variable-sets.test.tsx` | the set-count picker and the ⓘ panel's explanation of it, rendered from fixture props |
 | `components/workout-tracker.hydration.test.tsx` | the real `renderToString` → `hydrateRoot` path: default markup on the server, no hydration mismatch, saved state adopted after hydration without being clobbered |
 
 Timer behaviour is driven with Vitest fake timers; the state module takes `now`

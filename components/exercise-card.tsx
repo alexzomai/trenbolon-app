@@ -63,7 +63,7 @@ export function ExerciseCard({
   const done = visible.filter(Boolean).length
   const title = `${index + 1}. ${exercise.name}`
 
-  // Technique hints and the planned set range live in the ⓘ panel instead.
+  // The planned set range, when there is one, lives in the ⓘ panel instead.
   const options = exercise.setOptions
 
   return (

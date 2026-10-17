@@ -14,12 +14,10 @@ import {
   countCompleted,
   createInitialState,
   remainingMs,
-  setsFor,
   totalSets,
   workoutReducer,
   type WorkoutState,
 } from "./workout-state"
-import { getWorkout } from "./workout-plan"
 
 const T0 = 1_700_000_000_000
 
@@ -95,19 +93,6 @@ describe("roundtrip", () => {
     }
   })
 
-  it("restores the chosen set count, and with it the real total", () => {
-    const state = workoutReducer(createInitialState("push"), {
-      type: "set-sets",
-      exerciseId: "pec-deck",
-      count: 2,
-    })
-    saveState(state)
-
-    const restored = loadState(T0)!
-    expect(setsFor(restored, getWorkout("push").exercises[4])).toBe(2)
-    expect(totalSets(restored)).toBe(17)
-  })
-
   it("never persists a pending beep", () => {
     let state = workoutReducer(createInitialState("push"), {
       type: "toggle-set",
@@ -127,7 +112,7 @@ describe("roundtrip", () => {
     saveState(createInitialState("legs"))
     const raw = JSON.parse(window.localStorage.getItem(STORAGE_KEY)!)
     expect(raw.version).toBe(SCHEMA_VERSION)
-    expect(SCHEMA_VERSION).toBe(2)
+    expect(SCHEMA_VERSION).toBe(3)
     expect(raw.workoutId).toBe("legs")
   })
 
@@ -240,7 +225,7 @@ describe("corrupt and incompatible data", () => {
 
   it.each([
     ["not JSON at all", "{not json"],
-    ["truncated JSON", '{"version":2,"completed":'],
+    ["truncated JSON", '{"version":3,"completed":'],
     ["an empty string", ""],
     ["a JSON array", "[]"],
     ["a JSON scalar", "42"],
@@ -254,6 +239,7 @@ describe("corrupt and incompatible data", () => {
   it.each([
     ["a missing version", validRecord({ version: undefined })],
     ["the superseded v1 schema", validRecord({ version: 1 })],
+    ["the superseded v2 schema", validRecord({ version: 2 })],
     ["a newer schema version", validRecord({ version: SCHEMA_VERSION + 1 })],
     ["a missing workout id", validRecord({ workoutId: undefined })],
     ["an unknown workout id", validRecord({ workoutId: "arms" })],
@@ -307,26 +293,50 @@ describe("corrupt and incompatible data", () => {
     expect(loadState(T0)).toEqual(createInitialState("push"))
   })
 
-  it.each([
-    ["missing", undefined],
-    ["not an object", 3],
-    ["a count the plan does not offer", { "pec-deck": 5 }],
-    ["a non-numeric count", { "pec-deck": "2" }],
-  ])("keeps the progress and defaults the set count when setCounts is %s", (_label, setCounts) => {
-    let state = workoutReducer(createInitialState("push"), {
-      type: "toggle-set",
-      exerciseId: "bench-press",
-      setIndex: 0,
-      now: T0,
+  it("rejects a v2 record of the superseded plan, old weights and all", () => {
+    // Exactly what the previous plan saved: six exercises, a four-set row,
+    // its own weights and rep ranges, and a chosen butterfly set count.
+    write({
+      version: 2,
+      workoutId: "pull",
+      completed: {
+        "lat-pulldown-wide": [true, true, false, false],
+        "seated-row": [false, false, false],
+        "bent-over-row": [false, false, false],
+        "rear-delt-raise": [false, false, false],
+        shrugs: [false, false, false],
+        "biceps-curl": [false, false, false],
+      },
+      weights: {
+        "lat-pulldown-wide": "",
+        "seated-row": "",
+        "bent-over-row": "",
+        "rear-delt-raise": "",
+        shrugs: "",
+        "biceps-curl": "10",
+      },
+      reps: {
+        "lat-pulldown-wide": "8–12",
+        "seated-row": "10–12",
+        "bent-over-row": "10",
+        "rear-delt-raise": "12–15",
+        shrugs: "12",
+        "biceps-curl": "10",
+      },
+      setCounts: { "pec-deck": 2 },
+      soundEnabled: false,
+      timer: { status: "idle", durationSeconds: 120, deadline: null, remainingMs: null },
     })
-    state = workoutReducer(state, { type: "skip" })
-    write({ ...JSON.parse(serializeState(state)), setCounts })
 
-    const restored = loadState(T0)
-    expect(restored).not.toBeNull()
-    expect(countCompleted(restored!)).toBe(1)
-    expect(restored!.setCounts).toEqual({ "pec-deck": 3 })
-    expect(totalSets(restored!)).toBe(18)
+    expect(loadState(T0)).toBeNull()
+
+    const fresh = loadOrCreateState(T0)
+    expect(fresh).toEqual(createInitialState())
+    expect(fresh.reps["lat-pulldown-wide"]).toBe("12–15")
+    expect(fresh.weights["biceps-curl"]).toBe("")
+    expect(totalSets(fresh)).toBe(21)
+    expect(fresh.soundEnabled).toBe(true)
+    expect(fresh.timer.durationSeconds).toBe(90)
   })
 
   it("parses directly from a raw string too", () => {

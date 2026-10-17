@@ -68,11 +68,11 @@ describe("server rendering", () => {
     const text = renderToText()
 
     expect(text).toContain("Спина")
-    expect(text).toContain("0 / 19")
+    expect(text).toContain("0 / 21")
     expect(text).toContain("01:30")
     expect(text).toContain("Готов к старту")
     // The saved session must not leak into the prerendered markup.
-    expect(text).not.toContain("1 / 18")
+    expect(text).not.toContain("1 / 21")
     expect(text).not.toContain("Идёт отдых")
   })
 
@@ -116,8 +116,8 @@ describe("hydration", () => {
     const root = await hydrate()
 
     expect(root.textContent).toContain("Грудь")
-    expect(root.textContent).toContain("1 / 18")
-    expect(root.textContent).toContain("6%")
+    expect(root.textContent).toContain("1 / 21")
+    expect(root.textContent).toContain("5%")
     expect(root.textContent).toContain("Идёт отдых")
     expect(root.textContent).toContain("01:00")
 
@@ -129,7 +129,7 @@ describe("hydration", () => {
     const root = await hydrate()
 
     expect(root.textContent).toContain("Спина")
-    expect(root.textContent).toContain("0 / 19")
+    expect(root.textContent).toContain("0 / 21")
     expect(root.textContent).toContain("Готов к старту")
     expect(window.localStorage.getItem(STORAGE_KEY)).toBeNull()
   })

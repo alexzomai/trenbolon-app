@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest"
 import {
   DEFAULT_WORKOUT_ID,
   REST_PRESETS,
-  ROTATION_NOTE,
   WORKOUTS,
   WORKOUT_IDS,
   getWorkout,
@@ -11,6 +10,37 @@ import {
   maxSets,
   plannedTotalSets,
 } from "./workout-plan"
+
+/** The source note, verbatim: seven exercises per day, in order. */
+const SOURCE: Record<string, readonly string[]> = {
+  pull: [
+    "Тяга верхнего блока широким хватом",
+    "Горизонтальная тяга",
+    "Тяга в наклоне / нижний блок узким хватом",
+    "Разведение гантелей в наклоне",
+    "Шраги со штангой/гантелями",
+    "Бицепс стоя",
+    "Гиперэкстензия на поясницу",
+  ],
+  push: [
+    "Жим лёжа",
+    "Жим на наклонной",
+    "Жим гантелей сидя",
+    "Разведение гантелей в стороны стоя",
+    "Бабочка",
+    "Трицепс на «бычьих яйцах»",
+    "Подтягивания",
+  ],
+  legs: [
+    "Жим ногами или Смит-приседания",
+    "Сгибание ног лёжа",
+    "Разгибание голени",
+    "Подъём на икры стоя",
+    "Пресс на наклонной скамье",
+    "Сгибание шеи лёжа на спине с блином",
+    "Гиперэкстензия на поясницу",
+  ],
+}
 
 describe("plan shape", () => {
   it("offers exactly three workouts, Pull first", () => {
@@ -23,16 +53,16 @@ describe("plan shape", () => {
     ])
   })
 
-  it("has six exercises in every workout", () => {
+  it("has seven exercises in every workout", () => {
     for (const id of WORKOUT_IDS) {
-      expect(getWorkout(id).exercises).toHaveLength(6)
+      expect(getWorkout(id).exercises).toHaveLength(7)
     }
   })
 
-  it("totals 19 sets for Pull and 18 each for Push and Legs", () => {
-    expect(plannedTotalSets(getWorkout("pull"))).toBe(19)
-    expect(plannedTotalSets(getWorkout("push"))).toBe(18)
-    expect(plannedTotalSets(getWorkout("legs"))).toBe(18)
+  it("totals 21 sets for every day", () => {
+    for (const id of WORKOUT_IDS) {
+      expect(plannedTotalSets(getWorkout(id))).toBe(21)
+    }
   })
 
   it("uses globally unique exercise ids", () => {
@@ -40,17 +70,24 @@ describe("plan shape", () => {
     expect(new Set(ids).size).toBe(ids.length)
   })
 
-  it("names the day and the muscle groups of each workout", () => {
-    expect(getWorkout("pull").title).toBe("Спина")
-    expect(getWorkout("pull").description).toBe("спина, бицепс, задние дельты")
-    expect(getWorkout("push").title).toBe("Грудь")
-    expect(getWorkout("push").description).toBe("грудь, плечи, трицепс")
-    expect(getWorkout("legs").title).toBe("Ноги")
-    expect(getWorkout("legs").description).toBe("ноги и пресс")
+  it("gives the two hyperextension rows distinct ids", () => {
+    expect(getWorkout("pull").exercises.at(-1)).toMatchObject({
+      id: "back-hyperextension",
+      name: "Гиперэкстензия на поясницу",
+    })
+    expect(getWorkout("legs").exercises.at(-1)).toMatchObject({
+      id: "legs-hyperextension",
+      name: "Гиперэкстензия на поясницу",
+    })
   })
 
-  it("carries the rotation note from the source plan", () => {
-    expect(ROTATION_NOTE).toBe("Через день по кругу: Спина → Грудь → Ноги → Спина → Грудь → Ноги…")
+  it("names the day without any muscle-group prose", () => {
+    expect(getWorkout("pull").title).toBe("Спина")
+    expect(getWorkout("push").title).toBe("Грудь")
+    expect(getWorkout("legs").title).toBe("Ноги")
+    for (const id of WORKOUT_IDS) {
+      expect(getWorkout(id)).not.toHaveProperty("description")
+    }
   })
 
   it("keeps the rest presets and validates workout ids", () => {
@@ -68,111 +105,51 @@ describe("plan shape", () => {
   })
 })
 
-describe("Pull day matches the source", () => {
-  const exercises = getWorkout("pull").exercises
+describe.each(WORKOUT_IDS)("%s day matches the source", (id) => {
+  const exercises = getWorkout(id).exercises
 
-  it("keeps the source order, sets and reps", () => {
-    expect(
-      exercises.map((exercise) => [exercise.name, exercise.sets, exercise.reps])
-    ).toEqual([
-      ["Тяга верхнего блока широким хватом", 4, "8–12"],
-      ["Горизонтальная тяга", 3, "10–12"],
-      ["Тяга в наклоне", 3, "10"],
-      ["Разведение гантелей в наклоне", 3, "12–15"],
-      ["Шраги со штангой/гантелями", 3, "12"],
-      ["Бицепс стоя", 3, "10"],
-    ])
+  it("keeps the source names in order", () => {
+    expect(exercises.map((exercise) => exercise.name)).toEqual(SOURCE[id])
   })
 
-  it("prescribes a weight only where the source does", () => {
-    expect(exercises.map((exercise) => exercise.weight)).toEqual([
-      "",
-      "",
-      "",
-      "",
-      "",
-      "10",
-    ])
-  })
-
-  it("moves the parenthetical technique notes into hints", () => {
-    const hintFor = (id: string) => exercises.find((e) => e.id === id)?.hint
-    expect(hintFor("seated-row")).toBe("блок сидя, к животу")
-    expect(hintFor("bent-over-row")).toBe("или нижний блок узким хватом")
-    expect(hintFor("rear-delt-raise")).toBe("задняя дельта, лёгкий вес")
-    expect(hintFor("biceps-curl")).toBe(
-      "слегка согнутые колени, руки прямые, чуть выведены вперёд; гантели"
-    )
-  })
-})
-
-describe("Push day matches the source", () => {
-  const exercises = getWorkout("push").exercises
-
-  it("keeps the five original exercises, in order, with their ids", () => {
-    expect(exercises.slice(0, 5).map((exercise) => exercise.id)).toEqual([
-      "bench-press",
-      "incline-press",
-      "seated-dumbbell-press",
-      "lateral-raise",
-      "pec-deck",
-    ])
-  })
-
-  it("keeps the source sets, reps and weights", () => {
-    expect(
-      exercises.map((exercise) => [exercise.name, exercise.sets, exercise.reps, exercise.weight])
-    ).toEqual([
-      ["Жим лёжа", 3, "8–10", "10–13"],
-      ["Жим на наклонной", 3, "10", ""],
-      ["Жим гантелей сидя", 3, "10–12", ""],
-      ["Разведение гантелей в стороны стоя", 3, "12–15", ""],
-      ["Бабочка", 3, "10–12", "42–45"],
-      ["Трицепс на «бычьих яйцах»", 3, "до отказа", "20"],
-    ])
-  })
-
-  it("offers 2 or 3 sets for the butterfly only, defaulting to 3", () => {
-    const pecDeck = exercises.find((exercise) => exercise.id === "pec-deck")!
-    expect(pecDeck.setOptions).toEqual([2, 3])
-    expect(pecDeck.sets).toBe(3)
-    expect(maxSets(pecDeck)).toBe(3)
-
+  it("prescribes three sets of 12–15 everywhere, with a fixed count", () => {
     for (const exercise of exercises) {
-      if (exercise.id === "pec-deck") continue
+      expect(exercise.sets).toBe(3)
+      expect(exercise.reps).toBe("12–15")
       expect(exercise.setOptions).toBeUndefined()
-      expect(maxSets(exercise)).toBe(exercise.sets)
+      expect(maxSets(exercise)).toBe(3)
     }
   })
 
-  it("keeps the drop-set instruction as a hint", () => {
-    expect(exercises.at(-1)!.hint).toBe("начинать с 20 кг, понижать по 5 кг")
-    expect(exercises.find((e) => e.id === "seated-dumbbell-press")!.hint).toBe("плечи")
-    expect(exercises.find((e) => e.id === "lateral-raise")!.hint).toBe("боковая дельта")
+  it("prescribes no weight at all, not even bodyweight", () => {
+    expect(exercises.map((exercise) => exercise.weight)).toEqual(Array(7).fill(""))
+  })
+
+  it("carries no technique, drop-set or alternative hints beside the name", () => {
+    for (const exercise of exercises) {
+      expect(exercise).not.toHaveProperty("hint")
+    }
   })
 })
 
-describe("Legs day matches the source", () => {
-  const exercises = getWorkout("legs").exercises
+describe("the superseded plan is gone", () => {
+  const names = WORKOUT_IDS.flatMap((id) => getWorkout(id).exercises.map((e) => e.name))
 
-  it("keeps the source order, sets, reps and free-text weight", () => {
-    expect(
-      exercises.map((exercise) => [exercise.name, exercise.sets, exercise.reps, exercise.weight])
-    ).toEqual([
-      ["Жим ногами", 3, "10–12", ""],
-      ["Сгибание ног лежа на животе", 3, "12", ""],
-      ["Разгибание голени", 3, "12", ""],
-      ["Подъём на икры стоя", 3, "15", ""],
-      ["Пресс на наклонной скамье", 3, "10–15", "свой вес"],
-      ["Планка или скручивания на блоке", 3, "до отказа", ""],
-    ])
+  it("dropped the plank and the cable crunch", () => {
+    expect(names).not.toContain("Планка или скручивания на блоке")
   })
 
-  it("keeps alternatives and target muscles as hints", () => {
-    const hintFor = (id: string) => exercises.find((e) => e.id === id)?.hint
-    expect(hintFor("leg-press")).toBe("или Смит-приседания")
-    expect(hintFor("leg-curl")).toBe("бицепс бедра")
-    expect(hintFor("leg-extension")).toBe("квадрицепс")
-    expect(hintFor("decline-crunch")).toBe("вниз головой")
+  it("keeps the explicit alternatives inside the exercise names", () => {
+    expect(names).toContain("Тяга в наклоне / нижний блок узким хватом")
+    expect(names).toContain("Жим ногами или Смит-приседания")
+  })
+
+  it("has no leftover weights or rep ranges from the old note", () => {
+    const entries = WORKOUT_IDS.flatMap((id) =>
+      getWorkout(id).exercises.flatMap((e) => [e.weight, e.reps])
+    )
+    for (const stale of ["10–13", "42–45", "свой вес", "до отказа", "8–12", "8–10"]) {
+      expect(entries).not.toContain(stale)
+    }
   })
 })

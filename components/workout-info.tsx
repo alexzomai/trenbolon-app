@@ -14,7 +14,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
-import { ROTATION_NOTE, type Workout } from "@/lib/workout-plan"
+import { type Workout } from "@/lib/workout-plan"
 
 export const INFO_BUTTON_LABEL = "Информация о тренировке"
 
@@ -38,7 +38,6 @@ interface WorkoutInfoProps {
  * it dispatches nothing, so progress, storage and the rest timer are untouched.
  */
 export function WorkoutInfo({ workout, hiddenMarks }: WorkoutInfoProps) {
-  const hints = workout.exercises.filter((exercise) => exercise.hint)
   const ranges = workout.exercises.filter((exercise) => exercise.setOptions)
 
   return (
@@ -56,9 +55,7 @@ export function WorkoutInfo({ workout, hiddenMarks }: WorkoutInfoProps) {
       <DialogContent aria-describedby={undefined}>
         <DialogHeader>
           <DialogTitle>{INFO_BUTTON_LABEL}</DialogTitle>
-          <DialogDescription>
-            {workout.title} — {workout.description}. {ROTATION_NOTE}
-          </DialogDescription>
+          <DialogDescription>Тренировка: {workout.title}</DialogDescription>
         </DialogHeader>
 
         <DialogBody className="flex flex-col gap-4 text-sm leading-relaxed text-muted-foreground">
@@ -124,19 +121,6 @@ export function WorkoutInfo({ workout, hiddenMarks }: WorkoutInfoProps) {
                 перестают учитываться в прогрессе, но отметки сохраняются и снова зачтутся,
                 когда вернёшь большее число подходов.
               </p>
-            </section>
-          )}
-
-          {hints.length > 0 && (
-            <section className="flex flex-col gap-2">
-              <h3 className="font-semibold text-foreground">Техника упражнений</h3>
-              <ul className="flex list-none flex-col gap-1 p-0">
-                {hints.map((exercise) => (
-                  <li key={exercise.id}>
-                    {exercise.name}: {exercise.hint}
-                  </li>
-                ))}
-              </ul>
             </section>
           )}
         </DialogBody>

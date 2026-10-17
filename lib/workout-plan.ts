@@ -10,7 +10,7 @@
 export interface Exercise {
   /** Stable key used for state and localStorage. Unique across all workouts. */
   id: string
-  /** Short name; parenthetical technique notes live in `hint` instead. */
+  /** Name exactly as the source note writes it, alternatives included. */
   name: string
   /** Number of sets ("подходы") prescribed by the plan, and the default. */
   sets: number
@@ -19,12 +19,10 @@ export interface Exercise {
    * ("2–3×..."). Absent for the fixed-set majority.
    */
   setOptions?: readonly number[]
-  /** Default repetitions, free-form so "8–12" and "до отказа" are both fine. */
+  /** Default repetitions, free-form so "12–15" and "до отказа" are both fine. */
   reps: string
   /** Default weight, free-form, empty when the plan prescribes none. */
   weight: string
-  /** Technique, alternative or drop-set note shown under the title. */
-  hint?: string
 }
 
 export type WorkoutId = "pull" | "push" | "legs"
@@ -35,60 +33,28 @@ export interface Workout {
   label: string
   /** Heading of the day, e.g. "Спина". */
   title: string
-  /** Muscle groups of the day. */
-  description: string
   exercises: readonly Exercise[]
 }
 
-export const ROTATION_NOTE =
-  "Через день по кругу: Спина → Грудь → Ноги → Спина → Грудь → Ноги…"
+/** Every exercise of the current plan: three sets of 12–15, no set weight. */
+const REPS = "12–15"
+
+function exercise(id: string, name: string): Exercise {
+  return { id, name, sets: 3, reps: REPS, weight: "" }
+}
 
 const PULL: Workout = {
   id: "pull",
   label: "Спина",
   title: "Спина",
-  description: "спина, бицепс, задние дельты",
   exercises: [
-    {
-      id: "lat-pulldown-wide",
-      name: "Тяга верхнего блока широким хватом",
-      sets: 4,
-      reps: "8–12",
-      weight: "",
-    },
-    {
-      id: "seated-row",
-      name: "Горизонтальная тяга",
-      sets: 3,
-      reps: "10–12",
-      weight: "",
-      hint: "блок сидя, к животу",
-    },
-    {
-      id: "bent-over-row",
-      name: "Тяга в наклоне",
-      sets: 3,
-      reps: "10",
-      weight: "",
-      hint: "или нижний блок узким хватом",
-    },
-    {
-      id: "rear-delt-raise",
-      name: "Разведение гантелей в наклоне",
-      sets: 3,
-      reps: "12–15",
-      weight: "",
-      hint: "задняя дельта, лёгкий вес",
-    },
-    { id: "shrugs", name: "Шраги со штангой/гантелями", sets: 3, reps: "12", weight: "" },
-    {
-      id: "biceps-curl",
-      name: "Бицепс стоя",
-      sets: 3,
-      reps: "10",
-      weight: "10",
-      hint: "слегка согнутые колени, руки прямые, чуть выведены вперёд; гантели",
-    },
+    exercise("lat-pulldown-wide", "Тяга верхнего блока широким хватом"),
+    exercise("seated-row", "Горизонтальная тяга"),
+    exercise("bent-over-row", "Тяга в наклоне / нижний блок узким хватом"),
+    exercise("rear-delt-raise", "Разведение гантелей в наклоне"),
+    exercise("shrugs", "Шраги со штангой/гантелями"),
+    exercise("biceps-curl", "Бицепс стоя"),
+    exercise("back-hyperextension", "Гиперэкстензия на поясницу"),
   ],
 }
 
@@ -96,42 +62,14 @@ const PUSH: Workout = {
   id: "push",
   label: "Грудь",
   title: "Грудь",
-  description: "грудь, плечи, трицепс",
   exercises: [
-    { id: "bench-press", name: "Жим лёжа", sets: 3, reps: "8–10", weight: "10–13" },
-    { id: "incline-press", name: "Жим на наклонной", sets: 3, reps: "10", weight: "" },
-    {
-      id: "seated-dumbbell-press",
-      name: "Жим гантелей сидя",
-      sets: 3,
-      reps: "10–12",
-      weight: "",
-      hint: "плечи",
-    },
-    {
-      id: "lateral-raise",
-      name: "Разведение гантелей в стороны стоя",
-      sets: 3,
-      reps: "12–15",
-      weight: "",
-      hint: "боковая дельта",
-    },
-    {
-      id: "pec-deck",
-      name: "Бабочка",
-      sets: 3,
-      setOptions: [2, 3],
-      reps: "10–12",
-      weight: "42–45",
-    },
-    {
-      id: "triceps-extension",
-      name: "Трицепс на «бычьих яйцах»",
-      sets: 3,
-      reps: "до отказа",
-      weight: "20",
-      hint: "начинать с 20 кг, понижать по 5 кг",
-    },
+    exercise("bench-press", "Жим лёжа"),
+    exercise("incline-press", "Жим на наклонной"),
+    exercise("seated-dumbbell-press", "Жим гантелей сидя"),
+    exercise("lateral-raise", "Разведение гантелей в стороны стоя"),
+    exercise("pec-deck", "Бабочка"),
+    exercise("triceps-extension", "Трицепс на «бычьих яйцах»"),
+    exercise("pull-ups", "Подтягивания"),
   ],
 }
 
@@ -139,54 +77,21 @@ const LEGS: Workout = {
   id: "legs",
   label: "Ноги",
   title: "Ноги",
-  description: "ноги и пресс",
   exercises: [
-    {
-      id: "leg-press",
-      name: "Жим ногами",
-      sets: 3,
-      reps: "10–12",
-      weight: "",
-      hint: "или Смит-приседания",
-    },
-    {
-      id: "leg-curl",
-      name: "Сгибание ног лежа на животе",
-      sets: 3,
-      reps: "12",
-      weight: "",
-      hint: "бицепс бедра",
-    },
-    {
-      id: "leg-extension",
-      name: "Разгибание голени",
-      sets: 3,
-      reps: "12",
-      weight: "",
-      hint: "квадрицепс",
-    },
-    { id: "calf-raise", name: "Подъём на икры стоя", sets: 3, reps: "15", weight: "" },
-    {
-      id: "decline-crunch",
-      name: "Пресс на наклонной скамье",
-      sets: 3,
-      reps: "10–15",
-      weight: "свой вес",
-      hint: "вниз головой",
-    },
-    {
-      id: "plank",
-      name: "Планка или скручивания на блоке",
-      sets: 3,
-      reps: "до отказа",
-      weight: "",
-    },
+    exercise("leg-press", "Жим ногами или Смит-приседания"),
+    exercise("leg-curl", "Сгибание ног лёжа"),
+    exercise("leg-extension", "Разгибание голени"),
+    exercise("calf-raise", "Подъём на икры стоя"),
+    exercise("decline-crunch", "Пресс на наклонной скамье"),
+    exercise("neck-curl", "Сгибание шеи лёжа на спине с блином"),
+    // Same movement as the back day's closing exercise, but its own session key.
+    exercise("legs-hyperextension", "Гиперэкстензия на поясницу"),
   ],
 }
 
 export const WORKOUTS: Record<WorkoutId, Workout> = { pull: PULL, push: PUSH, legs: LEGS }
 
-/** Selector order, matching the rotation. */
+/** Selector order, matching the plan. */
 export const WORKOUT_IDS = ["pull", "push", "legs"] as const
 
 export const DEFAULT_WORKOUT_ID: WorkoutId = "pull"
@@ -208,7 +113,7 @@ export function maxSets(exercise: Exercise): number {
   return Math.max(exercise.sets, ...(exercise.setOptions ?? []))
 }
 
-/** Total sets of a workout at the plan's default set counts (19 / 18 / 18). */
+/** Total sets of a workout at the plan's default set counts (21 each). */
 export function plannedTotalSets(workout: Workout): number {
   return workout.exercises.reduce((total, exercise) => total + exercise.sets, 0)
 }

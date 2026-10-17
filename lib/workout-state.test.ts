@@ -12,7 +12,6 @@ import {
   countCompletedFor,
   createInitialState,
   formatDuration,
-  hiddenCompletedFor,
   isPristine,
   isWorkoutComplete,
   normalizeTimer,
@@ -67,23 +66,21 @@ describe("initial state", () => {
     expect(DEFAULT_WORKOUT_ID).toBe("pull")
   })
 
-  it("seeds weights and reps from the plan, including free text", () => {
+  it("seeds weights and reps from the plan: 12–15 reps, no weight", () => {
     const push = createInitialState("push")
-    expect(push.weights["bench-press"]).toBe("10–13")
-    expect(push.weights["incline-press"]).toBe("")
     expect(push.reps["lateral-raise"]).toBe("12–15")
-    expect(push.weights["pec-deck"]).toBe("42–45")
-    expect(push.reps["triceps-extension"]).toBe("до отказа")
+    expect(push.reps["pull-ups"]).toBe("12–15")
+    expect(Object.values(push.weights).every((weight) => weight === "")).toBe(true)
 
     const legs = createInitialState("legs")
-    expect(legs.weights["decline-crunch"]).toBe("свой вес")
-    expect(legs.reps["plank"]).toBe("до отказа")
+    expect(legs.weights["decline-crunch"]).toBe("")
+    expect(legs.reps["legs-hyperextension"]).toBe("12–15")
   })
 
-  it("allocates one mark per planned set, including the four-set row", () => {
+  it("allocates one mark per planned set", () => {
     const pull = createInitialState("pull")
-    expect(pull.completed["lat-pulldown-wide"]).toEqual([false, false, false, false])
-    expect(pull.completed["shrugs"]).toEqual([false, false, false])
+    expect(pull.completed["lat-pulldown-wide"]).toEqual([false, false, false])
+    expect(pull.completed["back-hyperextension"]).toEqual([false, false, false])
   })
 
   it("starts idle with the 90 s preset, sound on and no pending beep", () => {
@@ -94,17 +91,18 @@ describe("initial state", () => {
     expect(state.beepAt).toBeNull()
   })
 
-  it("defaults the variable-set exercise to three sets and nothing else", () => {
-    expect(createInitialState("push").setCounts).toEqual({ "pec-deck": 3 })
-    expect(createInitialState("pull").setCounts).toEqual({})
+  it("records no chosen set count, the plan offering no choice", () => {
+    for (const id of ["pull", "push", "legs"] as const) {
+      expect(createInitialState(id).setCounts).toEqual({})
+    }
   })
 })
 
 describe("totals per workout", () => {
-  it("counts 19 for Pull, 18 for Push and 18 for Legs", () => {
-    expect(totalSets(createInitialState("pull"))).toBe(19)
-    expect(totalSets(createInitialState("push"))).toBe(18)
-    expect(totalSets(createInitialState("legs"))).toBe(18)
+  it("counts 21 sets for each of the three days", () => {
+    expect(totalSets(createInitialState("pull"))).toBe(21)
+    expect(totalSets(createInitialState("push"))).toBe(21)
+    expect(totalSets(createInitialState("legs"))).toBe(21)
   })
 })
 
@@ -126,19 +124,19 @@ describe("progress", () => {
     expect(progressPercent(state)).toBe(0)
 
     state = toggle(state, "bench-press", 0)
-    expect(progressPercent(state)).toBe(6) // 1/18 = 5.55…
+    expect(progressPercent(state)).toBe(5) // 1/21 = 4.76…
 
     state = toggle(state, "bench-press", 1)
-    expect(progressPercent(state)).toBe(11) // 2/18 = 11.11…
+    expect(progressPercent(state)).toBe(10) // 2/21 = 9.52…
 
     const done = markAll(createInitialState("push"))
-    expect(countCompleted(done)).toBe(18)
+    expect(countCompleted(done)).toBe(21)
     expect(progressPercent(done)).toBe(100)
   })
 
-  it("counts all 19 sets of the Pull day", () => {
+  it("counts all 21 sets of the Pull day", () => {
     const done = markAll(createInitialState("pull"))
-    expect(countCompleted(done)).toBe(19)
+    expect(countCompleted(done)).toBe(21)
     expect(progressPercent(done)).toBe(100)
     expect(isWorkoutComplete(done)).toBe(true)
   })
@@ -162,79 +160,6 @@ describe("progress", () => {
   })
 })
 
-describe("variable set count", () => {
-  it("lets the butterfly drop to two sets, shrinking total and progress", () => {
-    let state = createInitialState("push")
-    state = workoutReducer(state, { type: "set-sets", exerciseId: "pec-deck", count: 2 })
-
-    expect(setsFor(state, ex(state, "pec-deck"))).toBe(2)
-    expect(totalSets(state)).toBe(17)
-
-    state = markAll(state)
-    expect(countCompleted(state)).toBe(17)
-    expect(progressPercent(state)).toBe(100)
-    expect(isWorkoutComplete(state)).toBe(true)
-  })
-
-  it("parks a discarded third mark and brings it back deterministically", () => {
-    let state = createInitialState("push")
-    state = toggle(state, "pec-deck", 2)
-    expect(countCompleted(state)).toBe(1)
-
-    state = workoutReducer(state, { type: "set-sets", exerciseId: "pec-deck", count: 2 })
-    // Out of range of the chosen two sets: not counted, but not thrown away.
-    expect(countCompleted(state)).toBe(0)
-    expect(countCompletedFor(state, ex(state, "pec-deck"))).toBe(0)
-    expect(hiddenCompletedFor(state, ex(state, "pec-deck"))).toBe(1)
-    expect(state.completed["pec-deck"]).toEqual([false, false, true])
-
-    state = workoutReducer(state, { type: "set-sets", exerciseId: "pec-deck", count: 3 })
-    expect(countCompleted(state)).toBe(1)
-    expect(hiddenCompletedFor(state, ex(state, "pec-deck"))).toBe(0)
-  })
-
-  it("refuses to mark a set beyond the chosen count", () => {
-    let state = createInitialState("push")
-    state = workoutReducer(state, { type: "set-sets", exerciseId: "pec-deck", count: 2 })
-    expect(toggle(state, "pec-deck", 2)).toBe(state)
-  })
-
-  it("ignores counts the plan does not offer, and exercises with no choice", () => {
-    const state = createInitialState("push")
-    expect(workoutReducer(state, { type: "set-sets", exerciseId: "pec-deck", count: 4 })).toBe(
-      state
-    )
-    expect(workoutReducer(state, { type: "set-sets", exerciseId: "pec-deck", count: 0 })).toBe(
-      state
-    )
-    expect(workoutReducer(state, { type: "set-sets", exerciseId: "pec-deck", count: 3 })).toBe(
-      state
-    )
-    expect(
-      workoutReducer(state, { type: "set-sets", exerciseId: "bench-press", count: 2 })
-    ).toBe(state)
-  })
-
-  it("finishes the workout on the last set of a reduced plan", () => {
-    let state = createInitialState("push")
-    state = workoutReducer(state, { type: "set-sets", exerciseId: "pec-deck", count: 2 })
-
-    // 16 of 17 sets.
-    for (const exercise of PUSH.exercises) {
-      for (let setIndex = 0; setIndex < setsFor(state, exercise); setIndex += 1) {
-        if (exercise.id === "pec-deck" && setIndex === 1) continue
-        state = toggle(state, exercise.id, setIndex)
-      }
-    }
-    expect(countCompleted(state)).toBe(16)
-    expect(state.timer.status).toBe("running")
-
-    state = toggle(state, "pec-deck", 1, T0 + 1_000)
-    expect(isWorkoutComplete(state)).toBe(true)
-    expect(state.timer.status).toBe("idle")
-  })
-})
-
 describe("editable weight and reps", () => {
   it("stores free-form strings including ranges and empties", () => {
     let state = createInitialState("push")
@@ -251,14 +176,18 @@ describe("editable weight and reps", () => {
 
   it("accepts textual reps and bodyweight", () => {
     let state = createInitialState("legs")
-    state = workoutReducer(state, { type: "set-reps", exerciseId: "plank", value: "до отказа" })
+    state = workoutReducer(state, {
+      type: "set-reps",
+      exerciseId: "neck-curl",
+      value: "до отказа",
+    })
     state = workoutReducer(state, {
       type: "set-weight",
       exerciseId: "decline-crunch",
       value: "свой вес",
     })
 
-    expect(state.reps["plank"]).toBe("до отказа")
+    expect(state.reps["neck-curl"]).toBe("до отказа")
     expect(state.weights["decline-crunch"]).toBe("свой вес")
   })
 
@@ -301,17 +230,17 @@ describe("rest timer", () => {
 
   it("stops the timer and completes the workout on the final set", () => {
     let state = createInitialState("push")
-    // Mark 17 of 18 sets.
+    // Mark 20 of 21 sets.
     for (const exercise of PUSH.exercises) {
       for (let setIndex = 0; setIndex < exercise.sets; setIndex += 1) {
-        if (exercise.id === "triceps-extension" && setIndex === 2) continue
+        if (exercise.id === "pull-ups" && setIndex === 2) continue
         state = toggle(state, exercise.id, setIndex)
       }
     }
-    expect(countCompleted(state)).toBe(17)
+    expect(countCompleted(state)).toBe(20)
     expect(state.timer.status).toBe("running")
 
-    state = toggle(state, "triceps-extension", 2, T0 + 1_000)
+    state = toggle(state, "pull-ups", 2, T0 + 1_000)
 
     expect(isWorkoutComplete(state)).toBe(true)
     expect(state.timer.status).toBe("idle")
@@ -449,21 +378,8 @@ describe("selecting another workout", () => {
     expect(switched.timer.status).toBe("idle")
     expect(switched.timer.durationSeconds).toBe(90)
     expect(switched.soundEnabled).toBe(true)
-    expect(switched.weights["bench-press"]).toBe("10–13")
+    expect(switched.weights["bench-press"]).toBe("")
     expect(switched.beepAt).toBeNull()
-  })
-
-  it("resets the chosen set count too", () => {
-    let state = workoutReducer(createInitialState("push"), {
-      type: "set-sets",
-      exerciseId: "pec-deck",
-      count: 2,
-    })
-    state = workoutReducer(state, { type: "select-workout", workoutId: "legs" })
-    state = workoutReducer(state, { type: "select-workout", workoutId: "push" })
-
-    expect(setsFor(state, ex(state, "pec-deck"))).toBe(3)
-    expect(totalSets(state)).toBe(18)
   })
 
   it("starts over when switching back, keeping nothing", () => {
@@ -509,15 +425,6 @@ describe("pristine session", () => {
       isPristine(workoutReducer(fresh, { type: "select-duration", seconds: 60, now: T0 }))
     ).toBe(false)
   })
-
-  it("notices a non-default set count", () => {
-    const state = workoutReducer(createInitialState("push"), {
-      type: "set-sets",
-      exerciseId: "pec-deck",
-      count: 2,
-    })
-    expect(isPristine(state)).toBe(false)
-  })
 })
 
 describe("normalizeTimer", () => {
@@ -562,20 +469,20 @@ describe("formatDuration", () => {
 })
 
 describe("reset", () => {
-  it("clears marks, edits, set count and timer, keeping the same workout", () => {
+  it("clears marks, edits and timer, keeping the same workout", () => {
     let state = markAll(createInitialState("push"))
     state = workoutReducer(state, { type: "set-weight", exerciseId: "pec-deck", value: "60" })
+    state = workoutReducer(state, { type: "set-reps", exerciseId: "pec-deck", value: "8" })
     state = workoutReducer(state, { type: "set-sound", enabled: false })
     state = workoutReducer(state, { type: "select-duration", seconds: 180, now: T0 })
-    state = workoutReducer(state, { type: "set-sets", exerciseId: "pec-deck", count: 2 })
 
     const reset = workoutReducer(state, { type: "reset" })
 
     expect(reset).toEqual(createInitialState("push"))
     expect(reset.workoutId).toBe("push")
     expect(countCompleted(reset)).toBe(0)
-    expect(reset.weights["pec-deck"]).toBe("42–45")
-    expect(reset.setCounts["pec-deck"]).toBe(3)
+    expect(reset.weights["pec-deck"]).toBe("")
+    expect(reset.reps["pec-deck"]).toBe("12–15")
     expect(reset.soundEnabled).toBe(true)
     expect(reset.timer.durationSeconds).toBe(90)
     expect(reset.timer.status).toBe("idle")
@@ -594,45 +501,52 @@ describe("buildResultsText", () => {
     state = workoutReducer(state, { type: "set-reps", exerciseId: "bench-press", value: "6" })
 
     const text = buildResultsText(state)
-    expect(text).toContain("Грудь (грудь, плечи, трицепс)")
+    expect(text).toContain("Грудь")
     expect(text).toContain("1. Жим лёжа — 3 × 6 повт., вес 15 кг — выполнено 1/3")
-    expect(text).toContain("2. Жим на наклонной — 3 × 10 повт., вес не указан — выполнено 0/3")
-    // Free-text reps are printed as written, without the "повт." unit.
     expect(text).toContain(
-      "6. Трицепс на «бычьих яйцах» — 3 × до отказа, вес 20 кг — выполнено 0/3"
+      "2. Жим на наклонной — 3 × 12–15 повт., вес не указан — выполнено 0/3"
     )
-    expect(text).toContain("Итого: 1 / 18 подходов (6%)")
+    expect(text).toContain("7. Подтягивания — 3 × 12–15 повт., вес не указан — выполнено 0/3")
+    expect(text).toContain("Итого: 1 / 21 подходов (5%)")
     expect(text).toContain("Отдых между подходами: 90 с")
   })
 
-  it("reports the selected set count rather than the planned one", () => {
-    const state = workoutReducer(createInitialState("push"), {
-      type: "set-sets",
-      exerciseId: "pec-deck",
-      count: 2,
+  it("keeps free text out of the kilogram and repetition units", () => {
+    let state = createInitialState("legs")
+    state = workoutReducer(state, {
+      type: "set-weight",
+      exerciseId: "decline-crunch",
+      value: "свой вес",
+    })
+    state = workoutReducer(state, {
+      type: "set-reps",
+      exerciseId: "neck-curl",
+      value: "до отказа",
     })
 
     const text = buildResultsText(state)
-    expect(text).toContain("5. Бабочка — 2 × 10–12 повт., вес 42–45 кг — выполнено 0/2")
-    expect(text).toContain("Итого: 0 / 17 подходов (0%)")
+    expect(text).toContain("5. Пресс на наклонной скамье — 3 × 12–15 повт., вес: свой вес")
+    expect(text).toContain(
+      "6. Сгибание шеи лёжа на спине с блином — 3 × до отказа, вес не указан"
+    )
   })
 
   it("follows the current workout, not a fixed one", () => {
     const text = buildResultsText(createInitialState("legs"))
 
-    expect(text).toContain("Ноги (ноги и пресс)")
-    // A bodyweight entry is not a kilogram figure, so it is not suffixed with кг.
-    expect(text).toContain("5. Пресс на наклонной скамье — 3 × 10–15 повт., вес: свой вес")
-    expect(text).toContain("6. Планка или скручивания на блоке — 3 × до отказа, вес не указан")
-    expect(text).toContain("Итого: 0 / 18 подходов (0%)")
+    expect(text).toContain("Ноги")
+    expect(text).toContain("7. Гиперэкстензия на поясницу — 3 × 12–15 повт., вес не указан")
+    expect(text).toContain("Итого: 0 / 21 подходов (0%)")
     expect(text).not.toContain("Жим лёжа")
   })
 
   it("starts from the Pull day by default", () => {
     const text = buildResultsText(createInitialState())
-    expect(text).toContain("Спина (спина, бицепс, задние дельты)")
-    expect(text).toContain("1. Тяга верхнего блока широким хватом — 4 × 8–12 повт., вес не указан — выполнено 0/4")
-    expect(text).toContain("Итого: 0 / 19 подходов (0%)")
+    expect(text).toContain("Спина")
+    expect(text).toContain(
+      "1. Тяга верхнего блока широким хватом — 3 × 12–15 повт., вес не указан — выполнено 0/3"
+    )
+    expect(text).toContain("Итого: 0 / 21 подходов (0%)")
   })
 
   it("names every exercise of every workout exactly once", () => {
