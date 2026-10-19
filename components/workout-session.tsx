@@ -295,50 +295,60 @@ export function WorkoutSession({ hydrated }: WorkoutSessionProps) {
     .filter((entry) => entry.count > 0)
 
   return (
-    <main className="mx-auto w-full max-w-[760px] px-4 py-8 sm:py-10">
-      <header className="flex flex-col gap-3">
+    <main className="mx-auto w-full max-w-[560px] px-4 py-5 sm:py-8">
+      <header className="flex flex-col gap-2.5">
         <WorkoutSelector
           selected={isWorkoutId(state.workoutId) ? state.workoutId : null}
           onSelect={handleSelectWorkout}
         />
-        <SavedWorkoutsPanel state={state} onStart={handleStartSaved} />
 
-        {/* The ⓘ button holds every explanation the page used to spell out. */}
-        <div className="flex items-start justify-between gap-3">
-          <h1 className="flex items-center gap-2 text-xl font-bold sm:text-2xl">
-            <Dumbbell aria-hidden="true" className="size-5 shrink-0" />
-            {workout.title}
-          </h1>
+        {/* One toolbar row: the library, and the ⓘ button that holds every
+            explanation the page used to spell out. */}
+        <div className="flex items-center gap-2">
+          <div className="min-w-0 flex-1">
+            <SavedWorkoutsPanel state={state} onStart={handleStartSaved} />
+          </div>
           <WorkoutInfo workout={workout} hiddenMarks={hiddenMarks} />
         </div>
+
+        <h1 className="flex items-center gap-2 text-base leading-snug font-semibold sm:text-lg">
+          <Dumbbell aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
+          {workout.title}
+        </h1>
       </header>
 
-      <section aria-label="Общий прогресс" className="mt-7 flex flex-col gap-2">
-        <div className="flex items-end justify-between gap-3">
-          <div>
-            <p className="text-sm text-muted-foreground">Выполнено подходов</p>
-            <p className="text-2xl font-bold tabular-nums" aria-live="polite">
+      <section aria-label="Общий прогресс" className="mt-3 flex flex-col gap-1.5">
+        <div className="flex items-baseline justify-between gap-3">
+          <p className="flex items-baseline gap-1.5">
+            <span className="text-lg font-semibold tabular-nums" aria-live="polite">
               {completed} / {total}
-            </p>
-          </div>
-          <div className="text-right">
-            <p className="text-sm text-muted-foreground">{WORKOUT_CLOCK_LABEL}</p>
-            <p className="text-2xl font-bold tabular-nums" aria-label={`${WORKOUT_CLOCK_LABEL}: ${elapsed}`}>
+            </span>
+            <span className="text-xs text-muted-foreground">подходов</span>
+            <span className="text-xs text-muted-foreground" aria-hidden="true">
+              ·
+            </span>
+            <span className="text-xs text-muted-foreground tabular-nums" aria-hidden="true">
+              {percent}%
+            </span>
+          </p>
+          <p className="flex items-baseline gap-1.5">
+            <span className="text-xs text-muted-foreground">{WORKOUT_CLOCK_LABEL}</span>
+            <span
+              className="text-lg font-semibold tabular-nums"
+              aria-label={`${WORKOUT_CLOCK_LABEL}: ${elapsed}`}
+            >
               {elapsed}
-            </p>
-          </div>
+            </span>
+          </p>
         </div>
-        <p className="text-sm text-muted-foreground tabular-nums" aria-hidden="true">
-          {percent}%
-        </p>
         <Progress
           value={percent}
           aria-label={`Прогресс тренировки: ${percent}%`}
-          className="h-2 bg-secondary [&_[data-slot=progress-indicator]]:bg-success"
+          className="h-1.5 bg-secondary [&_[data-slot=progress-indicator]]:bg-success"
         />
       </section>
 
-      <div className="mt-6">
+      <div className="mt-3">
         <RestTimer
           timer={state.timer}
           remainingMs={remaining}
@@ -354,10 +364,8 @@ export function WorkoutSession({ hydrated }: WorkoutSessionProps) {
           alarmActive={alarmActive || restAudio.isAlarm(now)}
           onStopAlarm={silenceAlarm}
         />
-        <p className="mt-2 text-xs text-muted-foreground">
-          Фоновый звук зависит от браузера и ОС. При блокировке экрана или сворачивании браузера звук может прерваться.
-          Сначала запусти отдых нажатием.
-        </p>
+        {/* The passive note about background audio now lives in the ⓘ panel;
+            only the actionable warning stays on the page. */}
         {(audioStatus === "blocked" || audioStatus === "interrupted") && (
           <p role="alert" className="mt-2 text-sm text-destructive">
             Браузер остановил звук или запретил его запуск. Таймер продолжает идти.
@@ -369,13 +377,13 @@ export function WorkoutSession({ hydrated }: WorkoutSessionProps) {
       {complete && (
         <p
           role="status"
-          className="mt-6 rounded-xl border border-success bg-success-muted px-4 py-3 text-sm"
+          className="mt-4 rounded-xl border border-success bg-success-muted px-4 py-3 text-sm"
         >
           Тренировка завершена — отмечены все {total} подходов. Отличная работа!
         </p>
       )}
 
-      <ol className="mt-6 flex list-none flex-col gap-3 p-0">
+      <ol className="mt-4 flex list-none flex-col gap-2.5 p-0">
         {workout.exercises.map((exercise, index) => (
           <li key={exercise.id}>
             <ExerciseCard
@@ -401,7 +409,7 @@ export function WorkoutSession({ hydrated }: WorkoutSessionProps) {
       </ol>
 
       {/* grow + wrap: side by side when both fit, full width each when they do not. */}
-      <div className="mt-6 flex flex-wrap items-center gap-3">
+      <div className="mt-4 flex flex-wrap items-center gap-2">
         <Button
           type="button"
           variant="secondary"
@@ -433,7 +441,7 @@ export function WorkoutSession({ hydrated }: WorkoutSessionProps) {
 
       {/* Actionable, so it stays on the page rather than hiding in the ⓘ panel. */}
       {!storageAvailable && (
-        <footer className="mt-6 text-sm leading-relaxed">
+        <footer className="mt-4 text-sm leading-relaxed">
           <p className="text-destructive">
             Браузер запретил локальное хранилище — прогресс не сохранится после перезагрузки
             страницы.

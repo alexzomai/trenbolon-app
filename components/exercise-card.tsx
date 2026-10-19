@@ -6,7 +6,6 @@ import { useId } from "react"
 import { Button } from "@/components/ui/button"
 import {
   Card,
-  CardAction,
   CardContent,
   CardHeader,
   CardTitle,
@@ -61,7 +60,7 @@ export function ExerciseCard({
 
   const visible = marks.slice(0, sets)
   const done = visible.filter(Boolean).length
-  const title = `${index + 1}. ${exercise.name}`
+  const finished = sets > 0 && done === sets
 
   // The planned set range, when there is one, lives in the ⓘ panel instead.
   const options = exercise.setOptions
@@ -69,26 +68,45 @@ export function ExerciseCard({
   return (
     <Card
       size="sm"
-      className="gap-3 rounded-xl bg-card ring-1 ring-border [--card-spacing:--spacing(3.5)]"
+      className={cn(
+        "gap-2.5 rounded-xl bg-card ring-1 ring-border [--card-spacing:--spacing(3)]",
+        // Completed cards recede rather than shout: a green hairline, no fill.
+        finished && "ring-success/40"
+      )}
     >
-      <CardHeader className="items-center gap-x-3">
-        <CardTitle className="text-[0.95rem] leading-snug font-semibold">{title}</CardTitle>
-        <CardAction className="self-center text-right text-xs whitespace-nowrap text-muted-foreground tabular-nums">
-          <span>
-            {sets} × {reps.trim() || "—"}
+      <CardHeader className="gap-x-2.5">
+        {/* The position is a badge rather than a prefix in the title: the cards
+            are an ordered list, so screen readers already announce the number. */}
+        <CardTitle className="flex min-w-0 items-start gap-2.5 text-[0.95rem] leading-snug font-semibold">
+          <span
+            aria-hidden="true"
+            data-slot="exercise-number"
+            className={cn(
+              "mt-px grid size-6 shrink-0 place-items-center rounded-md bg-secondary text-xs font-semibold tabular-nums",
+              finished ? "text-success" : "text-muted-foreground"
+            )}
+          >
+            {index + 1}
           </span>
-          <span aria-hidden="true"> · </span>
-          <span>
-            <span className="sr-only">выполнено подходов: </span>
-            {done}/{sets}
-          </span>
-        </CardAction>
+          <span className="min-w-0 flex-1 break-words">{exercise.name}</span>
+        </CardTitle>
       </CardHeader>
 
       <CardContent className="flex flex-col gap-3">
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-          <div className="flex items-center gap-2">
-            <Label htmlFor={weightId} className="font-normal text-muted-foreground">
+        <p className="flex flex-wrap items-center gap-x-1.5 text-xs text-muted-foreground tabular-nums">
+          <span>
+            {sets} × {reps.trim() || "—"}
+          </span>
+          <span aria-hidden="true">·</span>
+          <span className={cn(finished && "text-success")}>
+            <span className="sr-only">выполнено подходов: </span>
+            {done}/{sets}
+          </span>
+        </p>
+
+        <div className="flex flex-wrap items-end gap-x-3 gap-y-2">
+          <div className="flex min-w-0 flex-1 basis-24 flex-col gap-1">
+            <Label htmlFor={weightId} className="text-xs font-normal text-muted-foreground">
               Вес, кг
             </Label>
             <Input
@@ -99,12 +117,12 @@ export function ExerciseCard({
               inputMode="text"
               autoComplete="off"
               aria-label={`Вес в кг, ${exercise.name}`}
-              className="h-9 w-20 border-transparent bg-secondary text-sm"
+              className="h-10 w-full min-w-0 border-transparent bg-secondary text-sm"
             />
           </div>
-          <div className="flex items-center gap-2">
-            <Label htmlFor={repsId} className="font-normal text-muted-foreground">
-              Повт.
+          <div className="flex min-w-0 flex-1 basis-24 flex-col gap-1">
+            <Label htmlFor={repsId} className="text-xs font-normal text-muted-foreground">
+              Повторения
             </Label>
             <Input
               id={repsId}
@@ -114,12 +132,12 @@ export function ExerciseCard({
               inputMode="text"
               autoComplete="off"
               aria-label={`Количество повторений, ${exercise.name}`}
-              className="h-9 w-20 border-transparent bg-secondary text-sm"
+              className="h-10 w-full min-w-0 border-transparent bg-secondary text-sm"
             />
           </div>
           {options && (
-            <div className="flex items-center gap-2">
-              <span id={setsLabelId} className="text-sm text-muted-foreground">
+            <div className="flex shrink-0 flex-col gap-1">
+              <span id={setsLabelId} className="text-xs text-muted-foreground">
                 Подходов
               </span>
               <ToggleGroup
@@ -137,7 +155,7 @@ export function ExerciseCard({
                     key={option}
                     value={String(option)}
                     aria-label={`${option} подхода`}
-                    className="size-9 px-0 text-sm tabular-nums"
+                    className="size-10 px-0 text-sm tabular-nums"
                   >
                     {option}
                   </ToggleGroupItem>

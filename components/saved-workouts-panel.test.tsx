@@ -2,6 +2,7 @@ import { fireEvent, render, screen, within } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { WorkoutTracker } from "./workout-tracker"
+import { REST_SETTINGS_LABEL } from "./rest-timer"
 import { stopAlarm } from "@/lib/beep"
 import { SAVED_WORKOUTS_KEY, savedWorkouts, type SavedWorkout } from "@/lib/saved-workouts"
 import { STORAGE_KEY, resetStorageHealthForTests } from "@/lib/workout-storage"
@@ -397,6 +398,8 @@ describe("launching", () => {
     expect(screen.getByRole("heading", { level: 1, name: /Сохранённая/ })).toBeInTheDocument()
     expect(screen.getByText("0 / 5")).toBeInTheDocument()
     expect(screen.getByRole("timer")).toHaveTextContent("02:00")
+    // The sound checkbox lives in the collapsible rest settings panel.
+    fireEvent.click(screen.getByRole("button", { name: REST_SETTINGS_LABEL }))
     expect(screen.getByRole("checkbox", { name: /Звуковой сигнал/ })).not.toBeChecked()
   })
 

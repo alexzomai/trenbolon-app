@@ -45,7 +45,8 @@ export function WorkoutSelector({ selected, onSelect }: WorkoutSelectorProps) {
         value={selected ?? ""}
         onValueChange={handleValueChange}
         aria-label="Тренировка"
-        className="grid w-full grid-cols-3 gap-2"
+        // A segmented control: one gray track, the active day lifted out of it.
+        className="grid w-full grid-cols-3 gap-1 rounded-xl bg-muted p-1"
       >
         {WORKOUT_IDS.map((id) => (
           <ToggleGroupItem
@@ -53,7 +54,7 @@ export function WorkoutSelector({ selected, onSelect }: WorkoutSelectorProps) {
             value={id}
             // min-h over h: a label that wraps grows the button instead of
             // shrinking the 44 px tap target.
-            className="min-h-11 px-1 py-1 text-[13px] leading-tight sm:text-sm"
+            className="min-h-10 rounded-lg border-transparent bg-transparent px-1 py-1 text-[13px] leading-tight text-muted-foreground data-[state=on]:border-transparent data-[state=on]:bg-secondary data-[state=on]:font-medium data-[state=on]:text-foreground sm:text-sm"
           >
             {WORKOUTS[id].label}
           </ToggleGroupItem>

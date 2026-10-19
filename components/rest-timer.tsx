@@ -1,7 +1,7 @@
 "use client"
 
-import { Timer } from "lucide-react"
-import { useId, useState } from "react"
+import { ChevronDown, Timer } from "lucide-react"
+import { useEffect, useId, useRef, useState, type RefObject } from "react"
 
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -53,6 +53,7 @@ export const CUSTOM_REST_LABEL = "Своё время"
 export const CUSTOM_REST_FIELD_LABEL = "Своё время отдыха между подходами, с"
 export const EXERCISE_REST_FIELD_LABEL = "Между упражнениями, с"
 export const APPLY_LABEL = "Применить"
+export const REST_SETTINGS_LABEL = "Настройки отдыха"
 
 /**
  * A seconds field that only ever commits a valid whole number, and only when
@@ -64,12 +65,14 @@ function SecondsField({
   committed,
   onApply,
   applyLabel,
+  inputRef,
 }: {
   label: string
   /** The stored value. A change from elsewhere (reset, reload) refills the draft. */
   committed: number
   onApply: (seconds: number) => void
   applyLabel: string
+  inputRef?: RefObject<HTMLInputElement | null>
 }) {
   const id = useId()
   const errorId = `${id}-error`
@@ -104,6 +107,7 @@ function SecondsField({
       <div className="flex min-w-0 items-center gap-2">
         <Input
           id={id}
+          ref={inputRef}
           value={draft}
           inputMode="numeric"
           autoComplete="off"
@@ -153,60 +157,83 @@ export function RestTimer({
   const headingId = useId()
   const soundId = useId()
   const timerId = useId()
+  const settingsId = useId()
 
   const isPaused = timer.status === "paused"
   const isIdle = timer.status === "idle"
   const formatted = formatDuration(remainingMs)
   const customSelected = rest.mode === "custom"
 
+  // Collapsed on load so the first exercise stays above the fold on a phone.
+  // The panel is only hidden, never unmounted: a draft typed into a seconds
+  // field and the running countdown survive closing it.
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const customInputRef = useRef<HTMLInputElement>(null)
+  // Bumped by «Своё время» so the focus lands after the panel is on screen.
+  const [focusTicket, setFocusTicket] = useState(0)
+  useEffect(() => {
+    if (focusTicket === 0) return
+    customInputRef.current?.focus()
+    customInputRef.current?.select()
+  }, [focusTicket])
+
   return (
     <section
       aria-labelledby={headingId}
-      className="rounded-2xl bg-muted px-4 py-4 sm:px-5"
+      className="rounded-xl border border-border bg-muted px-3 py-3 sm:px-4"
     >
-      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
         <h2
           id={headingId}
           className="flex items-center gap-2 text-[0.9rem] font-semibold sm:text-[0.95rem]"
         >
-          <Timer aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
+          <Timer aria-hidden="true" className="size-4 shrink-0 translate-y-px text-muted-foreground" />
           Отдых
         </h2>
-        <p className="ml-auto text-[13px] text-muted-foreground sm:text-sm" aria-live="polite">
+        {/* Which countdown this is, so a 03:00 rest is never a mystery. */}
+        <p className="text-[13px] text-muted-foreground" aria-live="polite">
+          {REST_KIND_LABELS[timer.kind]}
+        </p>
+        <p className="ml-auto text-[13px] text-muted-foreground" aria-live="polite">
           {timerEnabled ? TIMER_STATUS_LABELS[timer.status] : TIMER_DISABLED_LABEL}
         </p>
       </div>
 
-      {/* Which countdown this is, so a 03:00 rest is never a mystery. */}
-      <p className="mt-1 text-[13px] text-muted-foreground sm:text-sm" aria-live="polite">
-        {REST_KIND_LABELS[timer.kind]}
-      </p>
-
-      <p
-        role="timer"
-        aria-live="off"
-        aria-label={`Осталось ${formatted}`}
-        className="py-4 text-center text-5xl leading-none font-semibold tabular-nums sm:text-6xl"
-      >
-        {formatted}
-      </p>
-
-      <div className="flex min-h-11 items-center gap-2">
-        <Checkbox
-          id={timerId}
-          checked={timerEnabled}
-          onCheckedChange={(checked) => onTimerEnabledChange(checked === true)}
-          className="data-checked:border-success data-checked:bg-success data-checked:text-success-foreground"
-        />
-        <Label htmlFor={timerId} className="font-normal">
-          {TIMER_SWITCH_LABEL}
-        </Label>
+      <div className="mt-2 flex items-center gap-3">
+        <p
+          role="timer"
+          aria-live="off"
+          aria-label={`Осталось ${formatted}`}
+          className="text-[2.75rem] leading-none font-semibold tabular-nums"
+        >
+          {formatted}
+        </p>
+        <div className="ml-auto grid shrink-0 grid-cols-2 gap-2">
+          <Button
+            type="button"
+            variant="secondary"
+            className="h-10 px-3 font-normal"
+            disabled={isIdle || timer.status === "finished"}
+            onClick={onPauseResume}
+          >
+            {isPaused ? "Продолжить" : "Пауза"}
+          </Button>
+          <Button
+            type="button"
+            variant="secondary"
+            className="h-10 px-3 font-normal"
+            disabled={isIdle}
+            onClick={onSkip}
+          >
+            Пропустить
+          </Button>
+        </div>
       </div>
 
       <div
         role="group"
         aria-label="Длительность отдыха между подходами"
-        className="mt-2 grid grid-cols-3 gap-2"
+        className="mt-3 grid grid-cols-3 gap-1.5"
       >
         {REST_PRESETS.map((seconds) => {
           const selected = !customSelected && rest.presetSeconds === seconds
@@ -230,7 +257,12 @@ export function RestTimer({
           type="button"
           variant="secondary"
           aria-pressed={customSelected}
-          onClick={() => onSelectDuration(rest.customSeconds, { mode: "custom" })}
+          onClick={() => {
+            onSelectDuration(rest.customSeconds, { mode: "custom" })
+            // Picking «Своё время» is a request to edit it: reveal the field.
+            setSettingsOpen(true)
+            setFocusTicket((ticket) => ticket + 1)
+          }}
           className={cn(
             "h-10 min-w-0 px-1 text-sm font-normal",
             customSelected && "border-selected text-foreground"
@@ -240,11 +272,49 @@ export function RestTimer({
         </Button>
       </div>
 
-      <div className="mt-2 flex flex-col gap-3">
+      <div className="mt-2 flex min-h-11 flex-wrap items-center gap-x-2 gap-y-1">
+        <Checkbox
+          id={timerId}
+          checked={timerEnabled}
+          onCheckedChange={(checked) => onTimerEnabledChange(checked === true)}
+          className="data-checked:border-success data-checked:bg-success data-checked:text-success-foreground"
+        />
+        <Label htmlFor={timerId} className="font-normal">
+          {TIMER_SWITCH_LABEL}
+        </Label>
+        <Button
+          type="button"
+          variant="secondary"
+          aria-expanded={settingsOpen}
+          aria-controls={settingsId}
+          onClick={() => setSettingsOpen((open) => !open)}
+          className="ml-auto h-10 px-3 text-sm font-normal"
+        >
+          {REST_SETTINGS_LABEL}
+          <ChevronDown
+            aria-hidden="true"
+            className={cn("size-4", settingsOpen && "rotate-180")}
+          />
+        </Button>
+      </div>
+
+      {/* Keeps the chosen values in sight while the panel is closed. */}
+      <p className="mt-1 text-xs text-muted-foreground tabular-nums">
+        {customSelected
+          ? `Между подходами: своё, ${rest.customSeconds} с`
+          : `Между подходами: ${rest.presetSeconds} с`}
+        {" · "}
+        {`Между упражнениями: ${rest.exerciseSeconds} с`}
+        {" · "}
+        {`Звук: ${soundEnabled ? "вкл" : "выкл"}`}
+      </p>
+
+      <div id={settingsId} hidden={!settingsOpen} className="mt-3 flex flex-col gap-3">
         <SecondsField
           label={CUSTOM_REST_FIELD_LABEL}
           committed={rest.customSeconds}
           applyLabel={APPLY_LABEL}
+          inputRef={customInputRef}
           onApply={(seconds) => onSelectDuration(seconds, { mode: "custom" })}
         />
         <SecondsField
@@ -253,60 +323,38 @@ export function RestTimer({
           applyLabel={APPLY_LABEL}
           onApply={(seconds) => onSelectDuration(seconds, { kind: "exercise" })}
         />
-      </div>
-
-      <div className="mt-3 grid grid-cols-2 gap-2">
-        <Button
-          type="button"
-          variant="secondary"
-          className="h-10 font-normal"
-          disabled={isIdle || timer.status === "finished"}
-          onClick={onPauseResume}
-        >
-          {isPaused ? "Продолжить" : "Пауза"}
-        </Button>
-        <Button
-          type="button"
-          variant="secondary"
-          className="h-10 font-normal"
-          disabled={isIdle}
-          onClick={onSkip}
-        >
-          Пропустить
-        </Button>
+        <div className="flex min-h-11 flex-wrap items-center gap-2">
+          <Checkbox
+            id={soundId}
+            checked={soundEnabled}
+            disabled={!audioSupported}
+            onCheckedChange={(checked) => onSoundChange(checked === true)}
+            className="data-checked:border-success data-checked:bg-success data-checked:text-success-foreground"
+          />
+          <Label htmlFor={soundId} className="font-normal">
+            Звуковой сигнал в конце отдыха
+          </Label>
+          {!audioSupported && (
+            <span className="text-xs text-muted-foreground">
+              — браузер не поддерживает воспроизведение звука
+            </span>
+          )}
+        </div>
       </div>
 
       {alarmActive && (
         <Button
           type="button"
           onClick={onStopAlarm}
-          className="mt-2 h-11 w-full font-normal"
+          className="mt-3 h-11 w-full font-normal"
         >
           {STOP_ALARM_LABEL}
         </Button>
       )}
 
-      <p role="status" aria-live="assertive" className="mt-2 min-h-5 text-center text-sm">
+      <p role="status" aria-live="assertive" className="min-h-5 text-center text-sm">
         {alarmActive && "Сигнал звучит — нажми «Остановить сигнал»."}
       </p>
-
-      <div className="mt-2 flex flex-wrap items-center gap-2">
-        <Checkbox
-          id={soundId}
-          checked={soundEnabled}
-          disabled={!audioSupported}
-          onCheckedChange={(checked) => onSoundChange(checked === true)}
-          className="data-checked:border-success data-checked:bg-success data-checked:text-success-foreground"
-        />
-        <Label htmlFor={soundId} className="font-normal">
-          Звуковой сигнал в конце отдыха
-        </Label>
-        {!audioSupported && (
-          <span className="text-xs text-muted-foreground">
-            — браузер не поддерживает воспроизведение звука
-          </span>
-        )}
-      </div>
     </section>
   )
 }

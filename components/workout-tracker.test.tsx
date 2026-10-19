@@ -7,6 +7,7 @@ import {
   CUSTOM_REST_FIELD_LABEL,
   CUSTOM_REST_LABEL,
   EXERCISE_REST_FIELD_LABEL,
+  REST_SETTINGS_LABEL,
   STOP_ALARM_LABEL,
   TIMER_SWITCH_LABEL,
 } from "./rest-timer"
@@ -54,8 +55,18 @@ function timerDisplay(): HTMLElement {
   return screen.getByRole("timer")
 }
 
+/**
+ * Reveal the collapsible "Настройки отдыха" panel. Its controls stay mounted
+ * when it is closed, but they are hidden, so a click has to open it first.
+ */
+function expandRestSettings() {
+  const toggle = screen.getByRole("button", { name: REST_SETTINGS_LABEL })
+  if (toggle.getAttribute("aria-expanded") !== "true") fireEvent.click(toggle)
+}
+
 /** Type a between-set duration into "Своё время" and apply it. */
 function applyCustomRest(seconds: string) {
+  expandRestSettings()
   fireEvent.change(screen.getByLabelText(CUSTOM_REST_FIELD_LABEL), {
     target: { value: seconds },
   })
@@ -141,9 +152,9 @@ describe("rendering the plan", () => {
       screen.getByRole("heading", { level: 1, name: /Спина/ })
     ).toBeInTheDocument()
 
-    for (const [index, exercise] of PULL.exercises.entries()) {
+    for (const exercise of PULL.exercises) {
       expect(
-        screen.getByText(`${index + 1}. ${exercise.name}`, { exact: false })
+        screen.getByText(exercise.name, { exact: false })
       ).toBeInTheDocument()
     }
 
@@ -173,11 +184,11 @@ describe("rendering the plan", () => {
   it("shows the alternatives the plan names, in the card title itself", () => {
     render(<WorkoutTracker />)
     expect(
-      screen.getByText("3. Тяга в наклоне / нижний блок узким хватом")
+      screen.getByText("Тяга в наклоне / нижний блок узким хватом")
     ).toBeInTheDocument()
 
     switchTo("Ноги")
-    expect(screen.getByText("1. Жим ногами или Смит-приседания")).toBeInTheDocument()
+    expect(screen.getByText("Жим ногами или Смит-приседания")).toBeInTheDocument()
   })
 
   it("seeds the editable weight and reps fields from the plan", () => {
@@ -1196,6 +1207,7 @@ describe("between-set and between-exercise durations", () => {
   }
 
   function applyExerciseRest(seconds: string) {
+    expandRestSettings()
     fireEvent.change(screen.getByLabelText(EXERCISE_REST_FIELD_LABEL), {
       target: { value: seconds },
     })
@@ -1223,6 +1235,7 @@ describe("between-set and between-exercise durations", () => {
     expect(timerDisplay()).toHaveTextContent("01:00")
 
     // Typing alone must not restart the running rest.
+    expandRestSettings()
     fireEvent.change(screen.getByLabelText(CUSTOM_REST_FIELD_LABEL), { target: { value: "7" } })
     fireEvent.change(screen.getByLabelText(CUSTOM_REST_FIELD_LABEL), { target: { value: "75" } })
     expect(timerDisplay()).toHaveTextContent("01:00")
@@ -1246,6 +1259,7 @@ describe("between-set and between-exercise durations", () => {
     render(<WorkoutTracker />)
     markSet(1, 1)
 
+    expandRestSettings()
     fireEvent.change(screen.getByLabelText(CUSTOM_REST_FIELD_LABEL), { target: { value } })
     fireEvent.click(within(customRestRow()).getByRole("button", { name: APPLY_LABEL }))
 
@@ -1498,5 +1512,108 @@ describe("the overall workout clock", () => {
       vi.advanceTimersByTime(60_000)
     })
     expect(workoutClock()).toHaveTextContent("00:00:00")
+  })
+})
+
+describe("the collapsible rest settings panel", () => {
+  function settingsToggle(): HTMLElement {
+    return screen.getByRole("button", { name: REST_SETTINGS_LABEL })
+  }
+
+  function settingsPanel(): HTMLElement {
+    return document.getElementById(settingsToggle().getAttribute("aria-controls")!)!
+  }
+
+  it("starts collapsed, keeps its controls mounted, and expands on demand", () => {
+    render(<WorkoutTracker />)
+
+    expect(settingsToggle()).toHaveAttribute("aria-expanded", "false")
+    expect(settingsPanel()).toHaveAttribute("hidden")
+    // Hidden, not unmounted: the fields are still in the document.
+    expect(screen.getByLabelText(CUSTOM_REST_FIELD_LABEL)).toBeInTheDocument()
+    expect(screen.getByLabelText(EXERCISE_REST_FIELD_LABEL)).toBeInTheDocument()
+    expect(
+      screen.queryByRole("checkbox", { name: /Звуковой сигнал/ })
+    ).not.toBeInTheDocument()
+
+    fireEvent.click(settingsToggle())
+
+    expect(settingsToggle()).toHaveAttribute("aria-expanded", "true")
+    expect(settingsPanel()).not.toHaveAttribute("hidden")
+    expect(screen.getByRole("checkbox", { name: /Звуковой сигнал/ })).toBeInTheDocument()
+    expect(
+      within(settingsPanel()).getAllByRole("button", { name: APPLY_LABEL })
+    ).toHaveLength(2)
+
+    fireEvent.click(settingsToggle())
+    expect(settingsToggle()).toHaveAttribute("aria-expanded", "false")
+  })
+
+  it("keeps the chosen durations and the sound state visible while collapsed", () => {
+    render(<WorkoutTracker />)
+
+    expect(screen.getByText(/Между подходами: 90 с/)).toBeInTheDocument()
+    expect(screen.getByText(/Между упражнениями: 180 с/)).toBeInTheDocument()
+    expect(screen.getByText(/Звук: вкл/)).toBeInTheDocument()
+
+    applyCustomRest("45")
+    fireEvent.click(screen.getByRole("button", { name: REST_SETTINGS_LABEL }))
+
+    expect(settingsToggle()).toHaveAttribute("aria-expanded", "false")
+    expect(screen.getByText(/Между подходами: своё, 45 с/)).toBeInTheDocument()
+  })
+
+  it("opens the panel and focuses the field when «Своё время» is picked", () => {
+    render(<WorkoutTracker />)
+
+    fireEvent.click(screen.getByRole("button", { name: CUSTOM_REST_LABEL }))
+
+    expect(settingsToggle()).toHaveAttribute("aria-expanded", "true")
+    expect(screen.getByLabelText(CUSTOM_REST_FIELD_LABEL)).toHaveFocus()
+    expect(screen.getByRole("button", { name: CUSTOM_REST_LABEL })).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    )
+  })
+
+  it("preserves a running rest and an unapplied draft when collapsed", () => {
+    render(<WorkoutTracker />)
+    markSet(1, 1)
+    act(() => {
+      vi.advanceTimersByTime(30_000)
+    })
+    expect(timerDisplay()).toHaveTextContent("01:00")
+
+    expandRestSettings()
+    fireEvent.change(screen.getByLabelText(CUSTOM_REST_FIELD_LABEL), { target: { value: "42" } })
+    fireEvent.change(screen.getByLabelText(EXERCISE_REST_FIELD_LABEL), { target: { value: "240" } })
+
+    fireEvent.click(settingsToggle())
+    act(() => {
+      vi.advanceTimersByTime(10_000)
+    })
+
+    // The countdown kept running and nothing was committed by closing.
+    expect(timerDisplay()).toHaveTextContent("00:50")
+    expect(readStorage()?.rest).toMatchObject({ customSeconds: 90, exerciseSeconds: 180 })
+
+    expandRestSettings()
+    expect(screen.getByLabelText(CUSTOM_REST_FIELD_LABEL)).toHaveValue("42")
+    expect(screen.getByLabelText(EXERCISE_REST_FIELD_LABEL)).toHaveValue("240")
+  })
+})
+
+describe("exercise card layout", () => {
+  it("numbers every card with a badge and names the exercise in the title", () => {
+    render(<WorkoutTracker />)
+
+    const cards = screen.getAllByRole("listitem")
+    expect(cards).toHaveLength(PULL.exercises.length)
+    for (const [index, card] of cards.entries()) {
+      expect(card.querySelector("[data-slot=exercise-number]")).toHaveTextContent(
+        String(index + 1)
+      )
+      expect(within(card).getByText(PULL.exercises[index].name)).toBeInTheDocument()
+    }
   })
 })
