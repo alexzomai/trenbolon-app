@@ -13,8 +13,10 @@
  */
 
 import {
-  REST_PRESETS,
+  DEFAULT_EXERCISE_REST_SECONDS,
   getWorkout,
+  isRestPreset,
+  isRestSeconds,
   isWorkoutId,
   maxSets,
   type WorkoutId,
@@ -22,8 +24,13 @@ import {
 import { isSavedWorkoutId, parseSavedWorkout, type SavedWorkout } from "./saved-workouts"
 import {
   createInitialState,
+  createRestSettings,
   freezeWorkout,
+  isFiniteTimestamp,
   normalizeTimer,
+  type ClockState,
+  type RestKind,
+  type RestSettings,
   type TimerState,
   type TimerStatus,
   type WorkoutDefinition,
@@ -40,6 +47,11 @@ export const STORAGE_KEY = "ui-workout:state"
  * would otherwise outlive it. There are no migrations: switching workouts
  * already discards the session by design, so an older record is simply ignored
  * like any other incompatible one.
+ *
+ * The rest settings and the workout clock were added to version 3 rather than
+ * bumping it: they are *optional* on read, so a record written before they
+ * existed still restores its workout, marks, edits and running rest, and only
+ * the new fields fall back to their defaults.
  */
 export const SCHEMA_VERSION = 3
 
@@ -53,10 +65,17 @@ interface PersistedState {
   reps: Record<string, string>
   setCounts: Record<string, number>
   soundEnabled: boolean
+  /** Optional since the timer switch was added; absent means "enabled". */
+  timerEnabled?: boolean
+  /** Optional; absent means "derive from the timer's duration". */
+  rest?: RestSettings
   timer: TimerState
+  /** Optional; absent means "no workout had been started yet". */
+  clock?: ClockState
 }
 
 const TIMER_STATUSES: readonly TimerStatus[] = ["idle", "running", "paused", "finished"]
+const REST_KINDS: readonly RestKind[] = ["set", "exercise"]
 
 import { getStorage } from "./storage-access"
 
@@ -119,13 +138,12 @@ function isFiniteNumber(value: unknown): value is number {
 function validateTimer(value: unknown): TimerState | null {
   if (!isPlainObject(value)) return null
 
-  const { status, durationSeconds, deadline, remainingMs } = value
+  const { status, durationSeconds, deadline, remainingMs, kind } = value
 
   if (typeof status !== "string" || !TIMER_STATUSES.includes(status as TimerStatus)) {
     return null
   }
-  if (!isFiniteNumber(durationSeconds)) return null
-  if (!(REST_PRESETS as readonly number[]).includes(durationSeconds)) return null
+  if (!isRestSeconds(durationSeconds)) return null
   if (deadline !== null && !isFiniteNumber(deadline)) return null
   if (remainingMs !== null && !isFiniteNumber(remainingMs)) return null
 
@@ -139,7 +157,49 @@ function validateTimer(value: unknown): TimerState | null {
     durationSeconds,
     deadline: isFiniteNumber(deadline) ? deadline : null,
     remainingMs: isFiniteNumber(remainingMs) ? Math.max(0, remainingMs) : null,
+    // Added later than the rest of the timer: an older record is a between-set
+    // rest, which is the only kind that existed then.
+    kind: REST_KINDS.includes(kind as RestKind) ? (kind as RestKind) : "set",
   }
+}
+
+/**
+ * Rest settings, read leniently: each field falls back on its own, so a
+ * half-written or older record keeps the marks it came with. With no settings
+ * at all they are derived from the timer's duration, which is where a 60 or
+ * 180 chosen in an earlier version becomes the custom duration.
+ */
+function readRestSettings(value: unknown, timerSeconds: number): RestSettings {
+  const derived = createRestSettings(timerSeconds)
+  if (!isPlainObject(value)) return derived
+
+  const presetSeconds = isRestPreset(value.presetSeconds) ? value.presetSeconds : derived.presetSeconds
+  const customSeconds = isRestSeconds(value.customSeconds) ? value.customSeconds : derived.customSeconds
+  const exerciseSeconds = isRestSeconds(value.exerciseSeconds)
+    ? value.exerciseSeconds
+    : DEFAULT_EXERCISE_REST_SECONDS
+  const mode =
+    value.mode === "preset" || value.mode === "custom" ? value.mode : derived.mode
+
+  return { mode, presetSeconds, customSeconds, exerciseSeconds }
+}
+
+/**
+ * The workout clock, read strictly but on its own: a nonsensical pair of
+ * timestamps resets the clock rather than discarding the whole session. A
+ * record from before the clock existed starts no clock — inventing a start
+ * would invent workout time that never happened.
+ */
+function readClock(value: unknown): ClockState {
+  const empty: ClockState = { startedAt: null, finishedAt: null }
+  if (!isPlainObject(value)) return empty
+
+  const { startedAt, finishedAt } = value
+  if (startedAt === null || startedAt === undefined) return empty
+  if (!isFiniteTimestamp(startedAt)) return empty
+  if (finishedAt === null || finishedAt === undefined) return { startedAt, finishedAt: null }
+  if (!isFiniteTimestamp(finishedAt) || finishedAt < startedAt) return empty
+  return { startedAt, finishedAt }
 }
 
 function validateStringMap(value: unknown, workout: WorkoutDefinition): Record<string, string> | null {
@@ -240,8 +300,12 @@ export function parseState(raw: string | null, now: number): WorkoutState | null
     reps,
     setCounts: readSetCounts(parsed.setCounts, workout),
     soundEnabled: parsed.soundEnabled,
+    // Optional fields: only the field itself falls back, never the session.
+    timerEnabled: typeof parsed.timerEnabled === "boolean" ? parsed.timerEnabled : true,
+    rest: readRestSettings(parsed.rest, timer.durationSeconds),
     // An expired deadline becomes "finished" with no pending beep.
     timer: normalizeTimer(timer, now),
+    clock: readClock(parsed.clock),
     beepAt: null,
   }
 }
@@ -257,7 +321,10 @@ export function serializeState(state: WorkoutState): string {
     reps: state.reps,
     setCounts: state.setCounts,
     soundEnabled: state.soundEnabled,
+    timerEnabled: state.timerEnabled,
+    rest: state.rest,
     timer: state.timer,
+    clock: state.clock,
   }
   return JSON.stringify(persisted)
 }

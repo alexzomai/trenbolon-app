@@ -28,7 +28,7 @@ describe("importDrafts", () => {
     const repo = createWorkoutRepository()
     value(repo.create(draft("Старая")))
     const before = localStorage.getItem(SAVED_WORKOUTS_KEY)
-    const bad = { ...draft("Плохая"), restSeconds: 7 }
+    const bad = { ...draft("Плохая"), restSeconds: 0 }
     expect(repo.importDrafts([draft("Ок"), bad])).toEqual({ ok: false, error: "invalid" })
     expect(repo.importDrafts([])).toEqual({ ok: false, error: "invalid" })
     expect(localStorage.getItem(SAVED_WORKOUTS_KEY)).toBe(before)

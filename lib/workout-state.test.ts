@@ -352,9 +352,15 @@ describe("rest presets", () => {
     expect(state.timer.remainingMs).toBe(60_000)
   })
 
-  it("rejects durations that are not presets", () => {
+  it("rejects durations outside 1…3600 seconds and non-integers", () => {
     const state = createInitialState("push")
-    expect(workoutReducer(state, { type: "select-duration", seconds: 45, now: T0 })).toBe(state)
+    for (const seconds of [0, -30, 3601, 45.5, NaN, Infinity]) {
+      expect(workoutReducer(state, { type: "select-duration", seconds, now: T0 })).toBe(state)
+    }
+    // A valid custom duration is accepted, preset or not.
+    expect(
+      workoutReducer(state, { type: "select-duration", seconds: 45, now: T0 }).timer.durationSeconds
+    ).toBe(45)
   })
 })
 
@@ -431,7 +437,7 @@ describe("pristine session", () => {
 describe("normalizeTimer", () => {
   it("collapses an expired running timer to finished without a beep", () => {
     const timer = normalizeTimer(
-      { status: "running", durationSeconds: 90, deadline: T0, remainingMs: null },
+      { status: "running", durationSeconds: 90, deadline: T0, remainingMs: null, kind: "set" },
       T0 + 1
     )
     expect(timer.status).toBe("finished")
@@ -444,13 +450,14 @@ describe("normalizeTimer", () => {
       durationSeconds: 90,
       deadline: T0 + 10_000,
       remainingMs: null,
+      kind: "set" as const,
     }
     expect(normalizeTimer(original, T0)).toBe(original)
   })
 
   it("repairs a running timer that lost its deadline", () => {
     const timer = normalizeTimer(
-      { status: "running", durationSeconds: 120, deadline: null, remainingMs: null },
+      { status: "running", durationSeconds: 120, deadline: null, remainingMs: null, kind: "set" },
       T0
     )
     expect(timer.status).toBe("idle")

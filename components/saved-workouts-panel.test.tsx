@@ -118,7 +118,7 @@ describe("create, edit, reload, launch", () => {
     type("Вес 1", "40")
     type("Подходы 1", "4")
     type(/Варианты подходов 1/, "3, 4")
-    fireEvent.change(within(dialog()).getByLabelText("Отдых между подходами"), { target: { value: "180" } })
+    type("Отдых между подходами, с", "180")
     fireEvent.click(within(dialog()).getByRole("checkbox"))
     click("Сохранить", dialog())
 

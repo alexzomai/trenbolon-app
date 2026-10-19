@@ -1,4 +1,4 @@
-import { REST_PRESETS, type Exercise, type Workout } from "./workout-plan"
+import { DEFAULT_REST_SECONDS, isRestSeconds, type Exercise, type Workout } from "./workout-plan"
 import { getStorage } from "./storage-access"
 
 export const SAVED_WORKOUTS_KEY = "ui-workout:workouts"
@@ -42,7 +42,9 @@ const safeId = (value: unknown): value is string =>
 function validDraft(value: unknown): value is WorkoutDraft {
   if (!object(value) || !text(value.title) || !text(value.label)) return false
   if (typeof value.soundEnabled !== "boolean") return false
-  if (!(REST_PRESETS as readonly unknown[]).includes(value.restSeconds)) return false
+  // Any whole number of seconds in range: presets are a UI convenience, not a
+  // storage constraint, and workouts saved with an older preset stay valid.
+  if (!isRestSeconds(value.restSeconds)) return false
   if (!Array.isArray(value.exercises) || !value.exercises.length || value.exercises.length > MAX_EXERCISES_PER_WORKOUT) return false
   const ids = new Set<string>()
   for (const exercise of value.exercises) {
@@ -90,7 +92,7 @@ export function parseSavedWorkout(value: unknown): SavedWorkout | null {
 
 export function draftFromWorkout(
   workout: Workout | SavedWorkout,
-  restSeconds = "restSeconds" in workout ? workout.restSeconds : 90,
+  restSeconds = "restSeconds" in workout ? workout.restSeconds : DEFAULT_REST_SECONDS,
   soundEnabled = "soundEnabled" in workout ? workout.soundEnabled : true,
 ): WorkoutDraft {
   return copyDraft({ ...workout, restSeconds, soundEnabled })

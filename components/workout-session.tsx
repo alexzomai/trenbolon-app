@@ -14,12 +14,15 @@ import { isAudioSupported, startAlarm, stopAlarm, unlockAudio } from "@/lib/beep
 import { type SavedWorkout } from "@/lib/saved-workouts"
 import { isWorkoutId, type WorkoutId } from "@/lib/workout-plan"
 import { RestAudio, FRESH_ALARM_MS, type RestAudioStatus } from "@/lib/rest-audio"
-import { type WorkoutAction } from "@/lib/workout-state"
+import { type RestKind, type RestSettings, type WorkoutAction } from "@/lib/workout-state"
 import {
   buildResultsText,
   countCompleted,
   createInitialState,
+  elapsedMs,
+  formatClock,
   hiddenCompletedFor,
+  isClockRunning,
   isPristine,
   isWorkoutComplete,
   progressPercent,
@@ -43,6 +46,8 @@ type CopyStatus = { kind: "idle" } | { kind: "ok" } | { kind: "error"; message: 
 /** How often the running clock is re-read. Display granularity only — the
  *  timer itself is deadline-based, so a throttled tab stays correct. */
 const TICK_INTERVAL_MS = 250
+
+export const WORKOUT_CLOCK_LABEL = "Время тренировки"
 
 export interface WorkoutSessionProps {
   /**
@@ -110,8 +115,9 @@ export function WorkoutSession({ hydrated }: WorkoutSessionProps) {
   }, [state, hydrated])
 
   // --- clock --------------------------------------------------------------
+  const clockRunning = isClockRunning(state)
   useEffect(() => {
-    if (state.timer.status !== "running" && audioStatus !== "playing") return
+    if (state.timer.status !== "running" && audioStatus !== "playing" && !clockRunning) return
 
     // `now` is already current whenever a timer starts: every path that starts
     // one sets it from the click handler, and a restored one seeds it above.
@@ -131,7 +137,7 @@ export function WorkoutSession({ hydrated }: WorkoutSessionProps) {
       window.removeEventListener("focus", sync)
       window.removeEventListener("pageshow", sync)
     }
-  }, [state.timer.status, restAudio, audioStatus])
+  }, [state.timer.status, restAudio, audioStatus, clockRunning])
 
   const { deadline, status } = state.timer
   useEffect(() => {
@@ -178,12 +184,26 @@ export function WorkoutSession({ hydrated }: WorkoutSessionProps) {
     setNow(Date.now())
   }, [silenceAlarm, dispatchTimer])
 
-  const handleSelectDuration = useCallback((seconds: number) => {
-    unlockAudio()
-    silenceAlarm()
-    dispatchTimer({ type: "select-duration", seconds, now: Date.now() })
-    setNow(Date.now())
-  }, [silenceAlarm, dispatchTimer])
+  const handleSelectDuration = useCallback(
+    (seconds: number, options?: { kind?: RestKind; mode?: RestSettings["mode"] }) => {
+      unlockAudio()
+      silenceAlarm()
+      dispatchTimer({ type: "select-duration", seconds, now: Date.now(), ...options })
+      setNow(Date.now())
+    },
+    [silenceAlarm, dispatchTimer]
+  )
+
+  const handleTimerEnabledChange = useCallback(
+    (enabled: boolean) => {
+      if (enabled) unlockAudio()
+      // Switching the timer off must cut a sounding alarm off at once; switching
+      // it back on must not start a countdown or a sound.
+      silenceAlarm()
+      dispatchTimer({ type: "set-timer-enabled", enabled })
+    },
+    [silenceAlarm, dispatchTimer]
+  )
 
   const handlePauseResume = useCallback(() => {
     unlockAudio()
@@ -261,6 +281,9 @@ export function WorkoutSession({ hydrated }: WorkoutSessionProps) {
   const percent = progressPercent(state)
   const complete = isWorkoutComplete(state)
   const remaining = selectRemainingMs(state.timer, now)
+  // Absolute-timestamp based, so it survives rests, pauses, a switched-off
+  // timer, a background tab and a reload, and freezes on the final set.
+  const elapsed = formatClock(elapsedMs(state, now))
   // Marks parked beyond the chosen set count: explained in the ⓘ panel, since
   // the cards no longer carry prose.
   const hiddenMarks = workout.exercises
@@ -298,10 +321,16 @@ export function WorkoutSession({ hydrated }: WorkoutSessionProps) {
               {completed} / {total}
             </p>
           </div>
-          <p className="text-2xl font-bold tabular-nums" aria-hidden="true">
-            {percent}%
-          </p>
+          <div className="text-right">
+            <p className="text-sm text-muted-foreground">{WORKOUT_CLOCK_LABEL}</p>
+            <p className="text-2xl font-bold tabular-nums" aria-label={`${WORKOUT_CLOCK_LABEL}: ${elapsed}`}>
+              {elapsed}
+            </p>
+          </div>
         </div>
+        <p className="text-sm text-muted-foreground tabular-nums" aria-hidden="true">
+          {percent}%
+        </p>
         <Progress
           value={percent}
           aria-label={`Прогресс тренировки: ${percent}%`}
@@ -313,12 +342,15 @@ export function WorkoutSession({ hydrated }: WorkoutSessionProps) {
         <RestTimer
           timer={state.timer}
           remainingMs={remaining}
+          rest={state.rest}
+          timerEnabled={state.timerEnabled}
           soundEnabled={state.soundEnabled}
           audioSupported={audioSupported}
           onSelectDuration={handleSelectDuration}
           onPauseResume={handlePauseResume}
           onSkip={handleSkip}
           onSoundChange={handleSoundChange}
+          onTimerEnabledChange={handleTimerEnabledChange}
           alarmActive={alarmActive || restAudio.isAlarm(now)}
           onStopAlarm={silenceAlarm}
         />

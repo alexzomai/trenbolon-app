@@ -45,13 +45,10 @@
           "description": "Не пустая строка (пробелы по краям обрезаются)."
         },
         "restSeconds": {
-          "enum": [
-            60,
-            90,
-            120,
-            180
-          ],
-          "description": "Секунды отдыха."
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 3600,
+          "description": "Отдых между подходами в секундах (обычно 90 или 120)."
         },
         "soundEnabled": {
           "type": "boolean"

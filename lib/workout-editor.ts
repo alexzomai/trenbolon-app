@@ -14,7 +14,13 @@ import {
   type WorkoutDraft,
   type WorkoutStorageError,
 } from "./saved-workouts"
-import { REST_PRESETS, type Workout } from "./workout-plan"
+import {
+  DEFAULT_REST_SECONDS,
+  MAX_REST_SECONDS,
+  MIN_REST_SECONDS,
+  isRestSeconds,
+  type Workout,
+} from "./workout-plan"
 
 export interface ExerciseForm {
   id: string
@@ -30,7 +36,8 @@ export interface WorkoutForm {
   label: string
   title: string
   exercises: ExerciseForm[]
-  restSeconds: number
+  /** Seconds as typed, so a half-entered "" or "1e" never becomes a number. */
+  restSeconds: string
   soundEnabled: boolean
 }
 
@@ -44,6 +51,7 @@ export interface ExerciseErrors {
 export interface FormErrors {
   label?: string
   title?: string
+  restSeconds?: string
   exercises?: string
   items: Record<string, ExerciseErrors>
 }
@@ -59,7 +67,13 @@ export function blankExercise(): ExerciseForm {
 }
 
 export function blankForm(): WorkoutForm {
-  return { label: "", title: "", exercises: [blankExercise()], restSeconds: 90, soundEnabled: true }
+  return {
+    label: "",
+    title: "",
+    exercises: [blankExercise()],
+    restSeconds: String(DEFAULT_REST_SECONDS),
+    soundEnabled: true,
+  }
 }
 
 /** Form for editing: keeps the stored exercise ids. */
@@ -75,7 +89,7 @@ export function formFromDraft(draft: WorkoutDraft): WorkoutForm {
       reps: exercise.reps,
       weight: exercise.weight,
     })),
-    restSeconds: draft.restSeconds,
+    restSeconds: String(draft.restSeconds),
     soundEnabled: draft.soundEnabled,
   }
 }
@@ -98,6 +112,16 @@ function parseCount(value: string): number | null {
   return number >= 1 && number <= 100 ? number : null
 }
 
+/** Whole seconds, 1…3600, as typed. Shared wording with the rest panel. */
+export function parseRestSeconds(value: string): number | null {
+  const trimmed = value.trim()
+  if (!/^\d+$/.test(trimmed)) return null
+  const number = Number(trimmed)
+  return isRestSeconds(number) ? number : null
+}
+
+export const REST_SECONDS_MESSAGE = `Целое число секунд от ${MIN_REST_SECONDS} до ${MAX_REST_SECONDS}`
+
 const SETS_MESSAGE = "Целое число от 1 до 100"
 
 function parseOptions(value: string): number[] | null {
@@ -115,6 +139,8 @@ export function validateForm(form: WorkoutForm): { draft: WorkoutDraft } | { err
 
   if (!form.label.trim()) { errors.label = "Укажите короткое название"; fail() }
   if (!form.title.trim()) { errors.title = "Укажите заголовок"; fail() }
+  const restSeconds = parseRestSeconds(form.restSeconds)
+  if (restSeconds === null) { errors.restSeconds = REST_SECONDS_MESSAGE; fail() }
   if (form.exercises.length === 0) { errors.exercises = "Добавьте хотя бы одно упражнение"; fail() }
   if (form.exercises.length > MAX_EXERCISES) {
     errors.exercises = `Не больше ${MAX_EXERCISES} упражнений`
@@ -157,13 +183,11 @@ export function validateForm(form: WorkoutForm): { draft: WorkoutDraft } | { err
       label: form.label.trim(),
       title: form.title.trim(),
       exercises,
-      restSeconds: form.restSeconds,
+      restSeconds: restSeconds as number,
       soundEnabled: form.soundEnabled,
     },
   }
 }
-
-export const REST_CHOICES = REST_PRESETS
 
 const STORAGE_MESSAGES: Record<WorkoutStorageError, string> = {
   unavailable: "Хранилище браузера недоступно.",

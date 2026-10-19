@@ -11,7 +11,7 @@ import {
   buildExportJson,
   parseWorkoutImport,
 } from "./workout-transfer"
-import { WORKOUTS } from "./workout-plan"
+import { MAX_REST_SECONDS, MIN_REST_SECONDS, WORKOUTS } from "./workout-plan"
 
 let counter = 0
 const ids = () => `ex-${++counter}`
@@ -69,7 +69,9 @@ describe("parseWorkoutImport", () => {
   it.each([
     [{ label: "  " }, /Тренировка 1: поле «label» не должно быть пустым/],
     [{ title: 5 }, /«title» должно быть строкой/],
-    [{ restSeconds: 100 }, /«restSeconds».*60, 90, 120, 180.*100/],
+    [{ restSeconds: 0 }, /«restSeconds» — целое число секунд от 1 до 3600.*0/],
+    [{ restSeconds: 3601 }, /«restSeconds»/],
+    [{ restSeconds: 90.5 }, /«restSeconds»/],
     [{ restSeconds: "90" }, /«restSeconds»/],
     [{ soundEnabled: "true" }, /«soundEnabled».*true или false/],
     [{ exercises: [] }, /хотя бы одно упражнение/],
@@ -135,11 +137,13 @@ describe("published artifacts", () => {
   it("schema limits match the code and the prompt embeds the sample", () => {
     const schema = JSON.parse(readFileSync("public/workout-import.schema.json", "utf8"))
     expect(schema.properties.workouts.maxItems).toBe(MAX_IMPORT_WORKOUTS)
-    expect(schema.$defs.workout.properties.restSeconds.enum).toEqual([60, 90, 120, 180])
+    expect(schema.$defs.workout.properties.restSeconds).toMatchObject({
+      type: "integer", minimum: MIN_REST_SECONDS, maximum: MAX_REST_SECONDS,
+    })
     expect(schema.$defs.workout.properties.exercises.maxItems).toBe(1000)
     expect(schema.$defs.exercise.properties.sets.maximum).toBe(100)
     expect(schema.$defs.exercise.additionalProperties).toBe(false)
     expect(AI_PROMPT).toContain(SAMPLE_JSON)
-    expect(AI_PROMPT).toMatch(/60, 90, 120, 180/)
+    expect(AI_PROMPT).toMatch(/целое число секунд от 1 до 3600/)
   })
 })

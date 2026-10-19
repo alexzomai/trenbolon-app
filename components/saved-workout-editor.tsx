@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
   MAX_EXERCISES,
-  REST_CHOICES,
+  REST_SECONDS_MESSAGE,
   blankExercise,
   type ExerciseForm,
   type FormErrors,
@@ -60,7 +60,6 @@ function Field({ label, value, error, onChange, hint, inputMode }: FieldProps) {
 
 /** Controlled editor body; the parent owns the draft so it can guard leaving. */
 export function SavedWorkoutEditor({ form, onChange, errors, saveError }: SavedWorkoutEditorProps) {
-  const restId = useId()
   const soundId = useId()
 
   const patchExercise = (id: string, patch: Partial<ExerciseForm>) =>
@@ -97,21 +96,14 @@ export function SavedWorkoutEditor({ form, onChange, errors, saveError }: SavedW
         onChange={(title) => onChange({ ...form, title })}
       />
 
-      <div className="flex min-w-0 flex-col gap-1.5">
-        <Label htmlFor={restId}>Отдых между подходами</Label>
-        <select
-          id={restId}
-          value={form.restSeconds}
-          onChange={(event) => onChange({ ...form, restSeconds: Number(event.target.value) })}
-          className="h-11 w-full rounded-lg border border-input bg-background px-2.5 text-base md:text-sm"
-        >
-          {REST_CHOICES.map((seconds) => (
-            <option key={seconds} value={seconds}>
-              {seconds} с
-            </option>
-          ))}
-        </select>
-      </div>
+      <Field
+        label="Отдых между подходами, с"
+        value={form.restSeconds}
+        inputMode="numeric"
+        error={errors?.restSeconds}
+        hint={REST_SECONDS_MESSAGE}
+        onChange={(restSeconds) => onChange({ ...form, restSeconds })}
+      />
 
       <div className="flex min-h-11 items-center gap-2">
         <Checkbox

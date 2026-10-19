@@ -17,10 +17,12 @@
  */
 
 import {
+  DEFAULT_EXERCISE_REST_SECONDS,
   DEFAULT_REST_SECONDS,
   DEFAULT_WORKOUT_ID,
-  REST_PRESETS,
   getWorkout,
+  isRestPreset,
+  isRestSeconds,
   isWorkoutId,
   maxSets,
   type Exercise,
@@ -29,19 +31,56 @@ import {
 } from "./workout-plan"
 import { parseSavedWorkout, type SavedWorkout } from "./saved-workouts"
 
+export { isRestPreset, isRestSeconds }
+
 /** Anything the session can run: a built-in plan or a saved user workout. */
 export type WorkoutDefinition = Workout | SavedWorkout
 
 export type TimerStatus = "idle" | "running" | "paused" | "finished"
 
+/**
+ * Which rest a countdown is: the pause between two sets of the same exercise,
+ * or the longer one after the last set of an exercise. The two have their own
+ * durations, so the kind has to travel with the timer — both to label the
+ * countdown and so that editing one duration never rewrites the other's.
+ */
+export type RestKind = "set" | "exercise"
+
+/** Which between-set duration the user picked: a preset or their own number. */
+export type RestMode = "preset" | "custom"
+
 export interface TimerState {
   status: TimerStatus
-  /** Currently selected rest preset, in seconds. */
+  /** Duration of this countdown, in seconds. */
   durationSeconds: number
   /** Epoch ms at which a running timer ends. Only set while `running`. */
   deadline: number | null
   /** Frozen remainder in ms. Only set while `paused`. */
   remainingMs: number | null
+  /** Which rest this countdown is (or would be, while idle). */
+  kind: RestKind
+}
+
+/** Durations and the between-set selection, independent of any countdown. */
+export interface RestSettings {
+  mode: RestMode
+  /** Last chosen preset, 90 or 120. */
+  presetSeconds: number
+  /** The user's own between-set duration, remembered even while a preset is on. */
+  customSeconds: number
+  /** Rest after the last set of an exercise. */
+  exerciseSeconds: number
+}
+
+/**
+ * The overall workout clock. `startedAt` is the moment the first set was marked
+ * in this session — an absolute timestamp, so the clock keeps running through
+ * rests, pauses, a disabled timer, a background tab and a reload. `finishedAt`
+ * freezes it once every selected set is done; unmarking one re-opens it.
+ */
+export interface ClockState {
+  startedAt: number | null
+  finishedAt: number | null
 }
 
 export interface WorkoutState {
@@ -62,7 +101,11 @@ export interface WorkoutState {
   /** exercise id -> chosen set count. Only for exercises offering a choice. */
   setCounts: Record<string, number>
   soundEnabled: boolean
+  /** Whether rest countdowns run at all. Independent of `soundEnabled`. */
+  timerEnabled: boolean
+  rest: RestSettings
   timer: TimerState
+  clock: ClockState
   /**
    * Timestamp of the most recent *natural* rest completion. Bumped only by the
    * `tick` action, so restoring an already-expired timer from storage never
@@ -78,23 +121,53 @@ export type WorkoutAction =
   | { type: "set-weight"; exerciseId: string; value: string }
   | { type: "set-reps"; exerciseId: string; value: string }
   | { type: "set-sets"; exerciseId: string; count: number }
-  | { type: "select-duration"; seconds: number; now: number }
+  /**
+   * Adopts a rest duration. `kind` says which rest is being edited (default:
+   * between sets); `mode` forces the between-set selection, which is how
+   * "Своё время" can be chosen even when its value happens to be 90 or 120.
+   */
+  | { type: "select-duration"; seconds: number; now: number; kind?: RestKind; mode?: RestMode }
   | { type: "pause"; now: number }
   | { type: "resume"; now: number }
   | { type: "skip" }
   | { type: "set-sound"; enabled: boolean }
+  | { type: "set-timer-enabled"; enabled: boolean }
   | { type: "tick"; now: number }
   | { type: "reset" }
 
 export function createInitialTimer(
-  durationSeconds: number = DEFAULT_REST_SECONDS
+  durationSeconds: number = DEFAULT_REST_SECONDS,
+  kind: RestKind = "set"
 ): TimerState {
   return {
     status: "idle",
     durationSeconds,
     deadline: null,
     remainingMs: null,
+    kind,
   }
+}
+
+/**
+ * Rest settings for a session that rests `seconds` between sets. A value that
+ * is not one of the presets — an old saved 60 or 180, or a user's own number —
+ * is kept as the custom duration with the custom mode selected.
+ */
+export function createRestSettings(seconds: number = DEFAULT_REST_SECONDS): RestSettings {
+  const valid = isRestSeconds(seconds) ? seconds : DEFAULT_REST_SECONDS
+  return {
+    mode: isRestPreset(valid) ? "preset" : "custom",
+    presetSeconds: isRestPreset(valid) ? valid : DEFAULT_REST_SECONDS,
+    customSeconds: valid,
+    exerciseSeconds: DEFAULT_EXERCISE_REST_SECONDS,
+  }
+}
+
+/** The duration a rest of this kind runs for, in seconds. */
+export function restSecondsFor(state: WorkoutState, kind: RestKind): number {
+  const { rest } = state
+  if (kind === "exercise") return rest.exerciseSeconds
+  return rest.mode === "custom" ? rest.customSeconds : rest.presetSeconds
 }
 
 /**
@@ -123,6 +196,8 @@ export function createInitialState(
     if (exercise.setOptions) setCounts[exercise.id] = exercise.sets
   }
 
+  const rest = createRestSettings(snapshot ? snapshot.restSeconds : DEFAULT_REST_SECONDS)
+
   return {
     workoutId,
     ...(snapshot ? { snapshot } : {}),
@@ -131,7 +206,10 @@ export function createInitialState(
     reps,
     setCounts,
     soundEnabled: snapshot ? snapshot.soundEnabled : true,
-    timer: createInitialTimer(snapshot ? snapshot.restSeconds : DEFAULT_REST_SECONDS),
+    timerEnabled: true,
+    rest,
+    timer: createInitialTimer(rest.mode === "custom" ? rest.customSeconds : rest.presetSeconds),
+    clock: { startedAt: null, finishedAt: null },
     beepAt: null,
   }
 }
@@ -156,10 +234,6 @@ export function workoutOf(state: WorkoutState): WorkoutDefinition {
 /** The definition a reset/restart of this session starts from. */
 function sourceOf(state: WorkoutState): WorkoutId | SavedWorkout {
   return state.snapshot ?? (state.workoutId as WorkoutId)
-}
-
-export function isRestPreset(value: unknown): value is number {
-  return typeof value === "number" && (REST_PRESETS as readonly number[]).includes(value)
 }
 
 /** How many sets of this exercise count right now. */
@@ -239,32 +313,69 @@ export function formatDuration(ms: number): string {
 }
 
 /**
+ * How long the workout has been going: from the first marked set to now, or to
+ * the moment the last set was marked. Zero until the first set is marked —
+ * opening the page, switching workout or editing a weight starts nothing.
+ */
+export function elapsedMs(state: WorkoutState, now: number): number {
+  const { startedAt, finishedAt } = state.clock
+  if (startedAt === null) return 0
+  return Math.max(0, (finishedAt ?? now) - startedAt)
+}
+
+/** True while the workout clock is counting, i.e. started and not yet frozen. */
+export function isClockRunning(state: WorkoutState): boolean {
+  return state.clock.startedAt !== null && state.clock.finishedAt === null
+}
+
+/** HH:MM:SS, always two-digit, truncating part-seconds so it reads elapsed time. */
+export function formatClock(ms: number): string {
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000))
+  const hours = Math.floor(totalSeconds / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+  const seconds = totalSeconds % 60
+  return [hours, minutes, seconds].map((part) => String(part).padStart(2, "0")).join(":")
+}
+
+export const REST_KIND_LABELS: Record<RestKind, string> = {
+  set: "Между подходами",
+  exercise: "Между упражнениями",
+}
+
+/**
  * Collapse a timer that expired while the page was closed (or while the tab was
  * throttled) into the `finished` state. Used when restoring from storage, which
  * is why it deliberately does not touch `beepAt`.
  */
 export function normalizeTimer(timer: TimerState, now: number): TimerState {
   if (timer.status === "running") {
-    if (timer.deadline === null) return createInitialTimer(timer.durationSeconds)
+    if (timer.deadline === null) return createInitialTimer(timer.durationSeconds, timer.kind)
     if (now >= timer.deadline) {
       return {
         status: "finished",
         durationSeconds: timer.durationSeconds,
         deadline: null,
         remainingMs: 0,
+        kind: timer.kind,
       }
     }
   }
   return timer
 }
 
-function startTimer(timer: TimerState, now: number): TimerState {
+function startTimer(seconds: number, kind: RestKind, now: number): TimerState {
   return {
     status: "running",
-    durationSeconds: timer.durationSeconds,
-    deadline: now + timer.durationSeconds * 1000,
+    durationSeconds: seconds,
+    deadline: now + seconds * 1000,
     remainingMs: null,
+    kind,
   }
+}
+
+/** A usable clock reading: finite and not before the epoch. */
+export function isFiniteTimestamp(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0
 }
 
 function findExercise(state: WorkoutState, exerciseId: string): Exercise | undefined {
@@ -294,6 +405,7 @@ export function workoutReducer(state: WorkoutState, action: WorkoutAction): Work
       if (!exercise || !marks) return state
       // Sets beyond the chosen count are not part of this session.
       if (action.setIndex < 0 || action.setIndex >= setsFor(state, exercise)) return state
+      if (!isFiniteTimestamp(action.now)) return state
 
       const wasDone = marks[action.setIndex]
       const nextMarks = marks.slice()
@@ -304,15 +416,30 @@ export function workoutReducer(state: WorkoutState, action: WorkoutAction): Work
         completed: { ...state.completed, [action.exerciseId]: nextMarks },
       }
 
-      // Unmarking never touches the timer.
-      if (wasDone) return next
-
-      // The last remaining set ends the workout instead of starting another rest.
-      if (isWorkoutComplete(next)) {
-        return { ...next, timer: createInitialTimer(state.timer.durationSeconds) }
+      // Unmarking never starts a rest, and never erases an established start:
+      // the workout did begin, so undoing a mark only re-opens the clock.
+      if (wasDone) {
+        return { ...next, clock: { startedAt: state.clock.startedAt, finishedAt: null } }
       }
 
-      return { ...next, timer: startTimer(state.timer, action.now) }
+      const complete = isWorkoutComplete(next)
+      // The first newly marked set is what starts the workout clock.
+      next.clock = {
+        startedAt: state.clock.startedAt ?? action.now,
+        finishedAt: complete ? action.now : null,
+      }
+
+      // The last remaining set ends the workout instead of starting another rest.
+      if (complete || !state.timerEnabled) {
+        return { ...next, timer: createInitialTimer(restSecondsFor(state, "set")) }
+      }
+
+      // Completing an exercise earns the longer between-exercise rest. Works for
+      // out-of-order marks too: what counts is that nothing of it is left.
+      const kind: RestKind =
+        countCompletedFor(next, exercise) >= setsFor(next, exercise) ? "exercise" : "set"
+
+      return { ...next, timer: startTimer(restSecondsFor(state, kind), kind, action.now) }
     }
 
     case "set-weight":
@@ -340,37 +467,50 @@ export function workoutReducer(state: WorkoutState, action: WorkoutAction): Work
     }
 
     case "select-duration": {
-      if (!isRestPreset(action.seconds)) return state
+      // Invalid drafts never reach the state: the UI validates, and so does this.
+      if (!isRestSeconds(action.seconds)) return state
+      if (!isFiniteTimestamp(action.now)) return state
+      const kind: RestKind = action.kind ?? "set"
       const { timer } = state
 
+      let rest: RestSettings
+      if (kind === "exercise") {
+        rest = { ...state.rest, exerciseSeconds: action.seconds }
+      } else if (action.mode === "custom" || (!action.mode && !isRestPreset(action.seconds))) {
+        // A number that is not a preset can only be a custom duration — that is
+        // also how a stored 60 or 180 from an older version lands in "Своё время".
+        rest = { ...state.rest, mode: "custom", customSeconds: action.seconds }
+      } else {
+        rest = { ...state.rest, mode: "preset", presetSeconds: action.seconds }
+      }
+
+      // A live countdown of the *other* kind must keep its own duration.
+      if ((timer.status === "running" || timer.status === "paused") && timer.kind !== kind) {
+        return { ...state, rest }
+      }
+
       if (timer.status === "running") {
-        // Restart the countdown against the newly chosen preset.
-        return {
-          ...state,
-          timer: {
-            status: "running",
-            durationSeconds: action.seconds,
-            deadline: action.now + action.seconds * 1000,
-            remainingMs: null,
-          },
-        }
+        // Restart the countdown against the newly chosen duration.
+        return { ...state, rest, timer: startTimer(action.seconds, kind, action.now) }
       }
 
       if (timer.status === "paused") {
-        // Stay paused, but freeze the new preset as the remainder.
+        // Stay paused, but freeze the new duration as the remainder.
         return {
           ...state,
+          rest,
           timer: {
             status: "paused",
             durationSeconds: action.seconds,
             deadline: null,
             remainingMs: action.seconds * 1000,
+            kind,
           },
         }
       }
 
       // idle / finished: just adopt the new duration, ready to start.
-      return { ...state, timer: createInitialTimer(action.seconds) }
+      return { ...state, rest, timer: createInitialTimer(action.seconds, kind) }
     }
 
     case "pause": {
@@ -383,6 +523,7 @@ export function workoutReducer(state: WorkoutState, action: WorkoutAction): Work
           durationSeconds: timer.durationSeconds,
           deadline: null,
           remainingMs: Math.max(0, timer.deadline - action.now),
+          kind: timer.kind,
         },
       }
     }
@@ -397,17 +538,30 @@ export function workoutReducer(state: WorkoutState, action: WorkoutAction): Work
           durationSeconds: timer.durationSeconds,
           deadline: action.now + Math.max(0, timer.remainingMs ?? 0),
           remainingMs: null,
+          kind: timer.kind,
         },
       }
     }
 
     case "skip": {
       if (state.timer.status === "idle") return state
-      return { ...state, timer: createInitialTimer(state.timer.durationSeconds) }
+      return { ...state, timer: createInitialTimer(state.timer.durationSeconds, state.timer.kind) }
     }
 
     case "set-sound":
       return { ...state, soundEnabled: action.enabled }
+
+    case "set-timer-enabled": {
+      if (state.timerEnabled === action.enabled) return state
+      // Turning the timer off cancels any countdown at once (the UI silences the
+      // alarm in the same gesture). Turning it back on starts nothing: the next
+      // marked set does. Progress and the rest durations are untouched.
+      return {
+        ...state,
+        timerEnabled: action.enabled,
+        timer: createInitialTimer(restSecondsFor(state, "set")),
+      }
+    }
 
     case "tick": {
       const { timer } = state
@@ -420,6 +574,7 @@ export function workoutReducer(state: WorkoutState, action: WorkoutAction): Work
           durationSeconds: timer.durationSeconds,
           deadline: null,
           remainingMs: 0,
+          kind: timer.kind,
         },
         // Only a live tick may request a beep.
         beepAt: state.soundEnabled && action.now - timer.deadline <= 2000
@@ -446,6 +601,12 @@ export function isPristine(state: WorkoutState): boolean {
   return (
     state.workoutId === DEFAULT_WORKOUT_ID &&
     state.soundEnabled === initial.soundEnabled &&
+    state.timerEnabled === initial.timerEnabled &&
+    state.rest.mode === initial.rest.mode &&
+    state.rest.presetSeconds === initial.rest.presetSeconds &&
+    state.rest.customSeconds === initial.rest.customSeconds &&
+    state.rest.exerciseSeconds === initial.rest.exerciseSeconds &&
+    state.clock.startedAt === null &&
     state.timer.status === "idle" &&
     state.timer.durationSeconds === initial.timer.durationSeconds &&
     workoutOf(state).exercises.every(
@@ -457,6 +618,9 @@ export function isPristine(state: WorkoutState): boolean {
     )
   )
 }
+
+/** Shown instead of a status while the rest timer is switched off. */
+export const TIMER_DISABLED_LABEL = "Таймер выключен"
 
 export const TIMER_STATUS_LABELS: Record<TimerStatus, string> = {
   idle: "Готов к старту",
@@ -506,7 +670,8 @@ export function buildResultsText(state: WorkoutState): string {
 
   const completed = countCompleted(state)
   lines.push(`Итого: ${completed} / ${totalSets(state)} подходов (${progressPercent(state)}%)`)
-  lines.push(`Отдых между подходами: ${state.timer.durationSeconds} с`)
+  lines.push(`Отдых между подходами: ${restSecondsFor(state, "set")} с`)
+  lines.push(`Отдых между упражнениями: ${restSecondsFor(state, "exercise")} с`)
 
   return lines.join("\n")
 }

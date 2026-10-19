@@ -60,7 +60,7 @@ describe("saved workout definitions", () => {
     expect(localStorage.getItem(STORAGE_KEY)).toBe("existing session")
   })
   it.each([
-    { title: " " }, { label: "" }, { exercises: [] }, { restSeconds: 17 }, { soundEnabled: "yes" },
+    { title: " " }, { label: "" }, { exercises: [] }, { restSeconds: 0 }, { restSeconds: 3601 }, { restSeconds: 90.5 }, { restSeconds: "90" }, { soundEnabled: "yes" },
     { exercises: [{ ...draft().exercises[0], sets: 0 }] },
     { exercises: [{ ...draft().exercises[0], sets: 1.5 }] },
     { exercises: [{ ...draft().exercises[0], sets: Infinity }] },

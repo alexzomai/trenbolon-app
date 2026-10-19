@@ -118,9 +118,34 @@ export function plannedTotalSets(workout: Workout): number {
   return workout.exercises.reduce((total, exercise) => total + exercise.sets, 0)
 }
 
-/** Rest presets in seconds, offered as buttons in the timer panel. */
-export const REST_PRESETS = [60, 90, 120, 180] as const
+/**
+ * Between-set rest presets in seconds, offered as buttons in the timer panel.
+ * Anything else the user wants is entered as a custom duration, so the panel
+ * holds two presets and one "Своё время" choice rather than four buttons.
+ */
+export const REST_PRESETS = [90, 120] as const
 
 export type RestPreset = (typeof REST_PRESETS)[number]
 
 export const DEFAULT_REST_SECONDS: RestPreset = 90
+
+/** Default rest after the last set of an exercise. */
+export const DEFAULT_EXERCISE_REST_SECONDS = 180
+
+/** Bounds for any editable rest duration, in seconds. */
+export const MIN_REST_SECONDS = 1
+export const MAX_REST_SECONDS = 3600
+
+export function isRestPreset(value: unknown): value is RestPreset {
+  return typeof value === "number" && (REST_PRESETS as readonly number[]).includes(value)
+}
+
+/** A rest duration the app accepts anywhere: whole seconds, 1…3600. */
+export function isRestSeconds(value: unknown): value is number {
+  return (
+    typeof value === "number" &&
+    Number.isInteger(value) &&
+    value >= MIN_REST_SECONDS &&
+    value <= MAX_REST_SECONDS
+  )
+}

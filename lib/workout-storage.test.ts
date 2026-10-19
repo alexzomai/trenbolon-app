@@ -267,8 +267,16 @@ describe("corrupt and incompatible data", () => {
       validRecord({ timer: { status: "sprinting", durationSeconds: 90, deadline: null, remainingMs: null } }),
     ],
     [
-      "a non-preset duration",
-      validRecord({ timer: { status: "idle", durationSeconds: 45, deadline: null, remainingMs: null } }),
+      "a zero duration",
+      validRecord({ timer: { status: "idle", durationSeconds: 0, deadline: null, remainingMs: null } }),
+    ],
+    [
+      "a duration above an hour",
+      validRecord({ timer: { status: "idle", durationSeconds: 3601, deadline: null, remainingMs: null } }),
+    ],
+    [
+      "a fractional duration",
+      validRecord({ timer: { status: "idle", durationSeconds: 45.5, deadline: null, remainingMs: null } }),
     ],
     [
       "a running timer with no deadline",

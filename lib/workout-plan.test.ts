@@ -1,11 +1,15 @@
 import { describe, expect, it } from "vitest"
 
 import {
+  DEFAULT_EXERCISE_REST_SECONDS,
+  DEFAULT_REST_SECONDS,
   DEFAULT_WORKOUT_ID,
   REST_PRESETS,
   WORKOUTS,
   WORKOUT_IDS,
   getWorkout,
+  isRestPreset,
+  isRestSeconds,
   isWorkoutId,
   maxSets,
   plannedTotalSets,
@@ -91,11 +95,25 @@ describe("plan shape", () => {
   })
 
   it("keeps the rest presets and validates workout ids", () => {
-    expect(REST_PRESETS).toEqual([60, 90, 120, 180])
+    // Two presets plus a custom duration; anything else is entered by hand.
+    expect(REST_PRESETS).toEqual([90, 120])
+    expect(DEFAULT_REST_SECONDS).toBe(90)
+    expect(DEFAULT_EXERCISE_REST_SECONDS).toBe(180)
+    expect(isRestPreset(90)).toBe(true)
+    expect(isRestPreset(60)).toBe(false)
     expect(isWorkoutId("push")).toBe(true)
     expect(isWorkoutId("arms")).toBe(false)
     expect(isWorkoutId("")).toBe(false)
     expect(isWorkoutId(undefined)).toBe(false)
+  })
+
+  it("accepts any whole number of rest seconds from 1 to 3600", () => {
+    for (const seconds of [1, 60, 90, 100, 180, 3600]) {
+      expect(isRestSeconds(seconds)).toBe(true)
+    }
+    for (const value of [0, -30, 3601, 90.5, NaN, Infinity, "90", null, undefined]) {
+      expect(isRestSeconds(value)).toBe(false)
+    }
   })
 
   it("rejects inherited object keys", () => {

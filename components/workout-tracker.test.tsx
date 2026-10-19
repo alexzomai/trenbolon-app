@@ -2,11 +2,24 @@ import { act, fireEvent, render, screen, within } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { WorkoutTracker } from "./workout-tracker"
-import { STOP_ALARM_LABEL } from "./rest-timer"
+import {
+  APPLY_LABEL,
+  CUSTOM_REST_FIELD_LABEL,
+  CUSTOM_REST_LABEL,
+  EXERCISE_REST_FIELD_LABEL,
+  STOP_ALARM_LABEL,
+  TIMER_SWITCH_LABEL,
+} from "./rest-timer"
+import { WORKOUT_CLOCK_LABEL } from "./workout-session"
 import { SWITCH_WARNING } from "./workout-selector"
 import { startAlarm, stopAlarm, unlockAudio } from "@/lib/beep"
 import { getWorkout, type WorkoutId } from "@/lib/workout-plan"
-import { createInitialState, workoutReducer, type WorkoutState } from "@/lib/workout-state"
+import {
+  TIMER_DISABLED_LABEL,
+  createInitialState,
+  workoutReducer,
+  type WorkoutState,
+} from "@/lib/workout-state"
 import {
   STORAGE_KEY,
   resetStorageHealthForTests,
@@ -39,6 +52,21 @@ function markSet(exerciseIndex: number, setNumber: number) {
 
 function timerDisplay(): HTMLElement {
   return screen.getByRole("timer")
+}
+
+/** Type a between-set duration into "Своё время" and apply it. */
+function applyCustomRest(seconds: string) {
+  fireEvent.change(screen.getByLabelText(CUSTOM_REST_FIELD_LABEL), {
+    target: { value: seconds },
+  })
+  fireEvent.click(
+    within(customRestRow()).getByRole("button", { name: APPLY_LABEL })
+  )
+}
+
+/** The row holding the "Своё время" field and its own Apply button. */
+function customRestRow(): HTMLElement {
+  return screen.getByLabelText(CUSTOM_REST_FIELD_LABEL).parentElement!
 }
 
 function workoutChoice(name: string): HTMLElement {
@@ -574,7 +602,7 @@ describe("rest timer controls", () => {
     })
     expect(timerDisplay()).toHaveTextContent("00:45")
 
-    fireEvent.click(screen.getByRole("button", { name: "60 с" }))
+    applyCustomRest("60")
     expect(screen.getByText("Идёт отдых")).toBeInTheDocument()
     expect(timerDisplay()).toHaveTextContent("01:00")
   })
@@ -583,7 +611,7 @@ describe("rest timer controls", () => {
     render(<WorkoutTracker />)
     markSet(1, 1)
     fireEvent.click(screen.getByRole("button", { name: "Пауза" }))
-    fireEvent.click(screen.getByRole("button", { name: "180 с" }))
+    applyCustomRest("180")
 
     expect(screen.getByText("Пауза")).toBeInTheDocument()
     expect(timerDisplay()).toHaveTextContent("03:00")
@@ -701,7 +729,8 @@ describe("alarm stop button", () => {
   it.each([
     ["marking the next set", () => markSet(1, 2)],
     ["skipping", () => fireEvent.click(screen.getByRole("button", { name: "Пропустить" }))],
-    ["changing the preset", () => fireEvent.click(screen.getByRole("button", { name: "60 с" }))],
+    ["changing the preset", () => fireEvent.click(screen.getByRole("button", { name: "120 с" }))],
+    ["applying a custom duration", () => applyCustomRest("75")],
     [
       "unticking the sound checkbox",
       () => fireEvent.click(screen.getByLabelText("Звуковой сигнал в конце отдыха")),
@@ -951,7 +980,8 @@ describe("reset", () => {
     fireEvent.change(screen.getByLabelText(/Вес в кг, Горизонтальная тяга/), {
       target: { value: "99" },
     })
-    fireEvent.click(screen.getByRole("button", { name: "180 с" }))
+    fireEvent.click(screen.getByRole("button", { name: "120 с" }))
+    applyCustomRest("75")
     fireEvent.click(screen.getByLabelText("Звуковой сигнал в конце отдыха"))
     expect(readStorage()).not.toBeNull()
 
@@ -1069,5 +1099,404 @@ describe("copying results", () => {
     })
 
     expect(screen.getByText(/буфер обмена недоступен в этом браузере/)).toBeInTheDocument()
+  })
+})
+
+describe("the rest timer switch", () => {
+  function timerSwitch(): HTMLElement {
+    return screen.getByLabelText(TIMER_SWITCH_LABEL)
+  }
+
+  it("is on by default and labelled as its own control", () => {
+    render(<WorkoutTracker />)
+    expect(timerSwitch()).toHaveAttribute("aria-checked", "true")
+    // Separate from the sound preference, which has its own box.
+    expect(screen.getByLabelText("Звуковой сигнал в конце отдыха")).toHaveAttribute(
+      "aria-checked",
+      "true"
+    )
+  })
+
+  it("cancels a running rest and its alarm the moment it is switched off", () => {
+    render(<WorkoutTracker />)
+    markSet(1, 1)
+    act(() => {
+      vi.advanceTimersByTime(90_000)
+    })
+    expect(startAlarm).toHaveBeenCalledTimes(1)
+    expect(screen.getByRole("button", { name: STOP_ALARM_LABEL })).toBeInTheDocument()
+
+    vi.mocked(stopAlarm).mockClear()
+    fireEvent.click(timerSwitch())
+
+    expect(stopAlarm).toHaveBeenCalled()
+    expect(screen.queryByRole("button", { name: STOP_ALARM_LABEL })).not.toBeInTheDocument()
+    expect(screen.getByText(TIMER_DISABLED_LABEL)).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Пауза" })).toBeDisabled()
+    expect(screen.getByRole("button", { name: "Пропустить" })).toBeDisabled()
+  })
+
+  it("keeps marking sets silent while off, and the progress intact", () => {
+    render(<WorkoutTracker />)
+    fireEvent.click(timerSwitch())
+
+    markSet(1, 1)
+    markSet(1, 2)
+    markSet(1, 3) // completes the exercise: not even the long rest starts
+
+    expect(screen.getByText("3 / 21")).toBeInTheDocument()
+    expect(screen.getByText(TIMER_DISABLED_LABEL)).toBeInTheDocument()
+    expect(timerDisplay()).toHaveTextContent("01:30")
+
+    act(() => {
+      vi.advanceTimersByTime(10 * 60_000)
+    })
+    expect(startAlarm).not.toHaveBeenCalled()
+    expect(timerDisplay()).toHaveTextContent("01:30")
+  })
+
+  it("stays idle when switched back on, until the next marked set", () => {
+    render(<WorkoutTracker />)
+    fireEvent.click(timerSwitch())
+    markSet(1, 1)
+
+    fireEvent.click(timerSwitch())
+    expect(timerSwitch()).toHaveAttribute("aria-checked", "true")
+    expect(screen.getByText("Готов к старту")).toBeInTheDocument()
+    act(() => {
+      vi.advanceTimersByTime(5_000)
+    })
+    expect(screen.getByText("Готов к старту")).toBeInTheDocument()
+    expect(startAlarm).not.toHaveBeenCalled()
+
+    markSet(1, 2)
+    expect(screen.getByText("Идёт отдых")).toBeInTheDocument()
+  })
+
+  it("remembers being off across a reload, and keeps the durations", () => {
+    const first = render(<WorkoutTracker />)
+    fireEvent.click(screen.getByRole("button", { name: "120 с" }))
+    fireEvent.click(timerSwitch())
+    markSet(1, 1)
+    expect(readStorage()?.timerEnabled).toBe(false)
+    first.unmount()
+
+    render(<WorkoutTracker />)
+
+    expect(timerSwitch()).toHaveAttribute("aria-checked", "false")
+    expect(screen.getByText(TIMER_DISABLED_LABEL)).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "120 с" })).toHaveAttribute("aria-pressed", "true")
+    expect(setButton(1, 1)).toHaveAttribute("aria-pressed", "true")
+  })
+})
+
+describe("between-set and between-exercise durations", () => {
+  function exerciseRestRow(): HTMLElement {
+    return screen.getByLabelText(EXERCISE_REST_FIELD_LABEL).parentElement!
+  }
+
+  function applyExerciseRest(seconds: string) {
+    fireEvent.change(screen.getByLabelText(EXERCISE_REST_FIELD_LABEL), {
+      target: { value: seconds },
+    })
+    fireEvent.click(within(exerciseRestRow()).getByRole("button", { name: APPLY_LABEL }))
+  }
+
+  it("offers exactly 90, 120 and «Своё время»", () => {
+    render(<WorkoutTracker />)
+    const group = screen.getByRole("group", { name: "Длительность отдыха между подходами" })
+    expect(within(group).getAllByRole("button").map((button) => button.textContent)).toEqual([
+      "90 с",
+      "120 с",
+      CUSTOM_REST_LABEL,
+    ])
+    expect(screen.queryByRole("button", { name: "60 с" })).not.toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "180 с" })).not.toBeInTheDocument()
+  })
+
+  it("applies a custom duration only when applied, and never per keystroke", () => {
+    render(<WorkoutTracker />)
+    markSet(1, 1)
+    act(() => {
+      vi.advanceTimersByTime(30_000)
+    })
+    expect(timerDisplay()).toHaveTextContent("01:00")
+
+    // Typing alone must not restart the running rest.
+    fireEvent.change(screen.getByLabelText(CUSTOM_REST_FIELD_LABEL), { target: { value: "7" } })
+    fireEvent.change(screen.getByLabelText(CUSTOM_REST_FIELD_LABEL), { target: { value: "75" } })
+    expect(timerDisplay()).toHaveTextContent("01:00")
+
+    fireEvent.click(within(customRestRow()).getByRole("button", { name: APPLY_LABEL }))
+    expect(timerDisplay()).toHaveTextContent("01:15")
+    expect(screen.getByRole("button", { name: CUSTOM_REST_LABEL })).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    )
+  })
+
+  it.each([
+    ["an empty field", ""],
+    ["zero", "0"],
+    ["a negative number", "-30"],
+    ["a fraction", "1.5"],
+    ["text", "скоро"],
+    ["more than an hour", "3601"],
+  ])("reports %s and commits nothing", (_label, value) => {
+    render(<WorkoutTracker />)
+    markSet(1, 1)
+
+    fireEvent.change(screen.getByLabelText(CUSTOM_REST_FIELD_LABEL), { target: { value } })
+    fireEvent.click(within(customRestRow()).getByRole("button", { name: APPLY_LABEL }))
+
+    expect(within(customRestRow().parentElement!).getByRole("alert")).toHaveTextContent(
+      /Целое число секунд от 1 до 3600/
+    )
+    // The running rest keeps its own duration, and nothing was stored.
+    expect(timerDisplay()).toHaveTextContent("01:30")
+    expect(readStorage()?.rest).toMatchObject({ mode: "preset", customSeconds: 90 })
+  })
+
+  it("remembers «Своё время» and its value across a reload", () => {
+    const first = render(<WorkoutTracker />)
+    applyCustomRest("45")
+    markSet(1, 1)
+    expect(readStorage()?.rest).toMatchObject({ mode: "custom", customSeconds: 45 })
+    first.unmount()
+
+    render(<WorkoutTracker />)
+
+    expect(screen.getByRole("button", { name: CUSTOM_REST_LABEL })).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    )
+    expect(screen.getByLabelText(CUSTOM_REST_FIELD_LABEL)).toHaveValue("45")
+    expect(screen.getByRole("button", { name: "90 с" })).toHaveAttribute("aria-pressed", "false")
+  })
+
+  it("keeps «Своё время» selected when its value happens to be 90", () => {
+    const first = render(<WorkoutTracker />)
+    applyCustomRest("90")
+    markSet(1, 1)
+    first.unmount()
+
+    render(<WorkoutTracker />)
+    expect(screen.getByRole("button", { name: CUSTOM_REST_LABEL })).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    )
+    expect(screen.getByRole("button", { name: "90 с" })).toHaveAttribute("aria-pressed", "false")
+  })
+
+  it("names the countdown, and runs the long rest after the last set of an exercise", () => {
+    render(<WorkoutTracker />)
+
+    markSet(1, 1)
+    expect(screen.getByText("Между подходами")).toBeInTheDocument()
+    expect(timerDisplay()).toHaveTextContent("01:30")
+
+    markSet(1, 2)
+    markSet(1, 3)
+    expect(screen.getByText("Между упражнениями")).toBeInTheDocument()
+    expect(timerDisplay()).toHaveTextContent("03:00")
+
+    // The next exercise's first set is a between-set rest again.
+    markSet(2, 1)
+    expect(screen.getByText("Между подходами")).toBeInTheDocument()
+    expect(timerDisplay()).toHaveTextContent("01:30")
+  })
+
+  it("edits the long rest without touching a running between-set rest", () => {
+    render(<WorkoutTracker />)
+    markSet(1, 1)
+    act(() => {
+      vi.advanceTimersByTime(30_000)
+    })
+
+    applyExerciseRest("240")
+
+    expect(screen.getByText("Между подходами")).toBeInTheDocument()
+    expect(timerDisplay()).toHaveTextContent("01:00")
+
+    markSet(1, 2)
+    markSet(1, 3)
+    expect(screen.getByText("Между упражнениями")).toBeInTheDocument()
+    expect(timerDisplay()).toHaveTextContent("04:00")
+  })
+
+  it("edits the between-set rest without touching a running long rest", () => {
+    render(<WorkoutTracker />)
+    markSet(1, 1)
+    markSet(1, 2)
+    markSet(1, 3)
+    act(() => {
+      vi.advanceTimersByTime(10_000)
+    })
+    expect(timerDisplay()).toHaveTextContent("02:50")
+
+    fireEvent.click(screen.getByRole("button", { name: "120 с" }))
+
+    expect(screen.getByText("Между упражнениями")).toBeInTheDocument()
+    expect(timerDisplay()).toHaveTextContent("02:50")
+
+    markSet(2, 1)
+    expect(screen.getByText("Между подходами")).toBeInTheDocument()
+    expect(timerDisplay()).toHaveTextContent("02:00")
+  })
+
+  it("remembers the long rest across a reload", () => {
+    const first = render(<WorkoutTracker />)
+    applyExerciseRest("300")
+    markSet(1, 1)
+    expect(readStorage()?.rest).toMatchObject({ exerciseSeconds: 300 })
+    first.unmount()
+
+    render(<WorkoutTracker />)
+    expect(screen.getByLabelText(EXERCISE_REST_FIELD_LABEL)).toHaveValue("300")
+  })
+})
+
+describe("the overall workout clock", () => {
+  function workoutClock(): HTMLElement {
+    return screen.getByLabelText(new RegExp(`^${WORKOUT_CLOCK_LABEL}:`))
+  }
+
+  it("shows zero and does not start on mount or on an edit", () => {
+    render(<WorkoutTracker />)
+    expect(screen.getByText(WORKOUT_CLOCK_LABEL)).toBeInTheDocument()
+    expect(workoutClock()).toHaveTextContent("00:00:00")
+
+    fireEvent.change(screen.getByLabelText(/Вес в кг, Шраги/), { target: { value: "30" } })
+    fireEvent.click(screen.getByRole("button", { name: "120 с" }))
+    act(() => {
+      vi.advanceTimersByTime(5 * 60_000)
+    })
+    expect(workoutClock()).toHaveTextContent("00:00:00")
+  })
+
+  it("starts on the first marked set and keeps counting through rests and pauses", () => {
+    render(<WorkoutTracker />)
+    markSet(1, 1)
+
+    act(() => {
+      vi.advanceTimersByTime(65_000)
+    })
+    expect(workoutClock()).toHaveTextContent("00:01:05")
+
+    // Past the end of the rest, and through a pause of the next one.
+    act(() => {
+      vi.advanceTimersByTime(60_000)
+    })
+    expect(screen.getByText("Отдых завершён")).toBeInTheDocument()
+    expect(workoutClock()).toHaveTextContent("00:02:05")
+
+    markSet(1, 2)
+    fireEvent.click(screen.getByRole("button", { name: "Пауза" }))
+    act(() => {
+      vi.advanceTimersByTime(60_000)
+    })
+    expect(screen.getByText("Пауза")).toBeInTheDocument()
+    expect(workoutClock()).toHaveTextContent("00:03:05")
+  })
+
+  it("keeps counting while the rest timer is switched off", () => {
+    render(<WorkoutTracker />)
+    markSet(1, 1)
+    fireEvent.click(screen.getByLabelText(TIMER_SWITCH_LABEL))
+
+    act(() => {
+      vi.advanceTimersByTime(2 * 60_000)
+    })
+    expect(workoutClock()).toHaveTextContent("00:02:00")
+  })
+
+  it("freezes on the final set, resumes on an undo and freezes again", () => {
+    render(<WorkoutTracker />)
+
+    markSet(1, 1)
+    act(() => {
+      vi.advanceTimersByTime(60_000)
+    })
+    for (const [exerciseIndex, exercise] of PULL.exercises.entries()) {
+      for (let setNumber = 1; setNumber <= exercise.sets; setNumber += 1) {
+        if (exerciseIndex === 0 && setNumber === 1) continue
+        markSet(exerciseIndex + 1, setNumber)
+      }
+    }
+
+    expect(screen.getByText("21 / 21")).toBeInTheDocument()
+    expect(workoutClock()).toHaveTextContent("00:01:00")
+    act(() => {
+      vi.advanceTimersByTime(10 * 60_000)
+    })
+    expect(workoutClock()).toHaveTextContent("00:01:00")
+
+    // Undo the final set: the clock continues from the original start.
+    markSet(7, 3)
+    act(() => {
+      vi.advanceTimersByTime(30_000)
+    })
+    expect(workoutClock()).toHaveTextContent("00:11:30")
+
+    markSet(7, 3)
+    expect(screen.getByText("21 / 21")).toBeInTheDocument()
+    act(() => {
+      vi.advanceTimersByTime(5 * 60_000)
+    })
+    expect(workoutClock()).toHaveTextContent("00:11:30")
+  })
+
+  it("is not erased by unmarking every set", () => {
+    render(<WorkoutTracker />)
+    markSet(1, 1)
+    act(() => {
+      vi.advanceTimersByTime(45_000)
+    })
+    markSet(1, 1)
+
+    expect(screen.getByText("0 / 21")).toBeInTheDocument()
+    act(() => {
+      vi.advanceTimersByTime(15_000)
+    })
+    expect(workoutClock()).toHaveTextContent("00:01:00")
+  })
+
+  it("continues after a reload from the original start", () => {
+    const first = render(<WorkoutTracker />)
+    markSet(1, 1)
+    expect(readStorage()?.clock).toMatchObject({ startedAt: T0, finishedAt: null })
+    first.unmount()
+
+    vi.setSystemTime(T0 + 3 * 60_000)
+    render(<WorkoutTracker />)
+
+    expect(workoutClock()).toHaveTextContent("00:03:00")
+    act(() => {
+      vi.advanceTimersByTime(60_000)
+    })
+    expect(workoutClock()).toHaveTextContent("00:04:00")
+  })
+
+  it("is cleared by «Начать заново» and by switching workout", () => {
+    render(<WorkoutTracker />)
+    markSet(1, 1)
+    act(() => {
+      vi.advanceTimersByTime(60_000)
+    })
+    expect(workoutClock()).toHaveTextContent("00:01:00")
+
+    fireEvent.click(screen.getByRole("button", { name: /Начать заново/ }))
+    expect(workoutClock()).toHaveTextContent("00:00:00")
+
+    markSet(1, 1)
+    act(() => {
+      vi.advanceTimersByTime(60_000)
+    })
+    switchTo("Грудь")
+    expect(workoutClock()).toHaveTextContent("00:00:00")
+    act(() => {
+      vi.advanceTimersByTime(60_000)
+    })
+    expect(workoutClock()).toHaveTextContent("00:00:00")
   })
 })

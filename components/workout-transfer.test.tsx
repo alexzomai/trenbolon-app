@@ -69,7 +69,7 @@ describe("import UI", () => {
     render(<WorkoutTracker />)
     open()
     const bad = JSON.parse(SAMPLE_JSON)
-    bad.workouts.push({ ...bad.workouts[0], restSeconds: 45 })
+    bad.workouts.push({ ...bad.workouts[0], restSeconds: 0 })
     paste(JSON.stringify(bad))
     click("Проверить")
     expect(within(dialog()).getByRole("alert")).toHaveTextContent("Тренировка 2: поле «restSeconds»")

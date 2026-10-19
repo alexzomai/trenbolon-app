@@ -15,7 +15,7 @@ import {
   type WorkoutDraft,
 } from "./saved-workouts"
 import { newExerciseId } from "./workout-editor"
-import { REST_PRESETS } from "./workout-plan"
+import { MAX_REST_SECONDS, MIN_REST_SECONDS, isRestSeconds } from "./workout-plan"
 
 export const TRANSFER_VERSION = 1
 export const MAX_IMPORT_CHARS = 1_000_000
@@ -35,6 +35,7 @@ const isObject = (value: unknown): value is Record<string, unknown> =>
 const isCount = (value: unknown): value is number =>
   typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= MAX_SETS
 const SETS_RULE = `целое число от 1 до ${MAX_SETS}`
+const REST_RULE = `целое число секунд от ${MIN_REST_SECONDS} до ${MAX_REST_SECONDS}`
 
 class Collector {
   errors: string[] = []
@@ -118,9 +119,9 @@ function parseWorkout(raw: unknown, where: string, out: Collector, newId: () => 
   const title = requiredText(raw, "title", where, out)
   let restSeconds: number | null = null
   if (raw.restSeconds === undefined) out.add(`${where}: нет поля «restSeconds».`)
-  else if (!(REST_PRESETS as readonly unknown[]).includes(raw.restSeconds)) {
-    out.add(`${where}: поле «restSeconds» — одно из чисел ${REST_PRESETS.join(", ")} (секунды), сейчас: ${JSON.stringify(raw.restSeconds)}.`)
-  } else restSeconds = raw.restSeconds as number
+  else if (!isRestSeconds(raw.restSeconds)) {
+    out.add(`${where}: поле «restSeconds» — ${REST_RULE}, сейчас: ${JSON.stringify(raw.restSeconds)}.`)
+  } else restSeconds = raw.restSeconds
   let soundEnabled: boolean | null = null
   if (raw.soundEnabled === undefined) out.add(`${where}: нет поля «soundEnabled».`)
   else if (typeof raw.soundEnabled !== "boolean") out.add(`${where}: поле «soundEnabled» — true или false без кавычек.`)
@@ -244,7 +245,7 @@ export const AI_PROMPT = `Ты помогаешь составить трени�
 Тренировка (все поля обязательны, других полей быть не должно):
 - label — строка, короткое название для кнопки, не пустое (например "Плечи");
 - title — строка, заголовок тренировки, не пустой;
-- restSeconds — отдых между подходами в секундах, ровно одно из чисел: ${REST_PRESETS.join(", ")};
+- restSeconds — отдых между подходами, ${REST_RULE} (обычно 90 или 120);
 - soundEnabled — true или false (звуковой сигнал по окончании отдыха);
 - exercises — непустой массив упражнений, не больше ${MAX_EXERCISES_PER_WORKOUT}; порядок массива = порядок выполнения.
 

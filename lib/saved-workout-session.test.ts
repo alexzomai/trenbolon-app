@@ -169,7 +169,7 @@ describe("saved workout session storage", () => {
     expect(edit((s) => (s.exercises[0].setOptions = [2, 4]))).toBeNull()
     expect(edit((s) => (s.exercises[1].id = "a"))).toBeNull()
     expect(edit((s) => (s.exercises[0].id = "__proto__"))).toBeNull()
-    expect(edit((s) => (s.restSeconds = 45))).toBeNull()
+    expect(edit((s) => (s.restSeconds = 3601))).toBeNull()
     expect(edit((s) => (s.title = " "))).toBeNull()
     expect(tampered(undefined, (raw) => (raw.snapshot = "nope"))).toBeNull()
   })

@@ -38,7 +38,13 @@ import {
   type WorkoutForm,
 } from "@/lib/workout-editor"
 import { WORKOUTS, WORKOUT_IDS } from "@/lib/workout-plan"
-import { isPristine, setsFor, workoutOf, type WorkoutState } from "@/lib/workout-state"
+import {
+  isPristine,
+  restSecondsFor,
+  setsFor,
+  workoutOf,
+  type WorkoutState,
+} from "@/lib/workout-state"
 
 export const LIBRARY_BUTTON_LABEL = "Мои тренировки"
 export const TRANSFER_BUTTON_LABEL = "Импорт / экспорт"
@@ -67,7 +73,9 @@ function currentForm(state: WorkoutState): WorkoutForm {
   const form = copyForm(workout)
   return {
     ...form,
-    restSeconds: state.timer.durationSeconds,
+    // The between-set duration, not whatever countdown happens to be running:
+    // an exercise rest must not become the saved workout's set rest.
+    restSeconds: String(restSecondsFor(state, "set")),
     soundEnabled: state.soundEnabled,
     exercises: form.exercises.map((item, index) => {
       const exercise = workout.exercises[index]
