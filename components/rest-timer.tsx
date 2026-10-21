@@ -1,6 +1,6 @@
 "use client"
 
-import { ChevronDown, Timer } from "lucide-react"
+import { ChevronDown, Pause, Play, SkipForward, Timer } from "lucide-react"
 import { useEffect, useId, useRef, useState, type RefObject } from "react"
 
 import { Button } from "@/components/ui/button"
@@ -54,6 +54,9 @@ export const CUSTOM_REST_FIELD_LABEL = "Своё время отдыха меж�
 export const EXERCISE_REST_FIELD_LABEL = "Между упражнениями, с"
 export const APPLY_LABEL = "Применить"
 export const REST_SETTINGS_LABEL = "Настройки отдыха"
+export const PAUSE_LABEL = "Пауза"
+export const RESUME_LABEL = "Продолжить"
+export const SKIP_LABEL = "Пропустить"
 
 /**
  * A seconds field that only ever commits a valid whole number, and only when
@@ -163,6 +166,7 @@ export function RestTimer({
   const isIdle = timer.status === "idle"
   const formatted = formatDuration(remainingMs)
   const customSelected = rest.mode === "custom"
+  const pauseResumeLabel = isPaused ? RESUME_LABEL : PAUSE_LABEL
 
   // Collapsed on load so the first exercise stays above the fold on a phone.
   // The panel is only hidden, never unmounted: a draft typed into a seconds
@@ -208,24 +212,36 @@ export function RestTimer({
         >
           {formatted}
         </p>
+        {/* Icon-only: the labels live in aria-label and title, so the row stays
+            compact without losing the accessible names. */}
         <div className="ml-auto grid shrink-0 grid-cols-2 gap-2">
           <Button
             type="button"
             variant="secondary"
-            className="h-10 px-3 font-normal"
+            size="icon"
+            className="size-11"
+            aria-label={pauseResumeLabel}
+            title={pauseResumeLabel}
             disabled={isIdle || timer.status === "finished"}
             onClick={onPauseResume}
           >
-            {isPaused ? "Продолжить" : "Пауза"}
+            {isPaused ? (
+              <Play aria-hidden="true" className="size-5" />
+            ) : (
+              <Pause aria-hidden="true" className="size-5" />
+            )}
           </Button>
           <Button
             type="button"
             variant="secondary"
-            className="h-10 px-3 font-normal"
+            size="icon"
+            className="size-11"
+            aria-label={SKIP_LABEL}
+            title={SKIP_LABEL}
             disabled={isIdle}
             onClick={onSkip}
           >
-            Пропустить
+            <SkipForward aria-hidden="true" className="size-5" />
           </Button>
         </div>
       </div>
@@ -297,17 +313,6 @@ export function RestTimer({
           />
         </Button>
       </div>
-
-      {/* Keeps the chosen values in sight while the panel is closed. */}
-      <p className="mt-1 text-xs text-muted-foreground tabular-nums">
-        {customSelected
-          ? `Между подходами: своё, ${rest.customSeconds} с`
-          : `Между подходами: ${rest.presetSeconds} с`}
-        {" · "}
-        {`Между упражнениями: ${rest.exerciseSeconds} с`}
-        {" · "}
-        {`Звук: ${soundEnabled ? "вкл" : "выкл"}`}
-      </p>
 
       <div id={settingsId} hidden={!settingsOpen} className="mt-3 flex flex-col gap-3">
         <SecondsField

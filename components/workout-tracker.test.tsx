@@ -1569,18 +1569,17 @@ describe("the collapsible rest settings panel", () => {
     expect(settingsToggle()).toHaveAttribute("aria-expanded", "false")
   })
 
-  it("keeps the chosen durations and the sound state visible while collapsed", () => {
+  it("keeps the applied custom rest selected after the panel is collapsed", () => {
     render(<WorkoutTracker />)
-
-    expect(screen.getByText(/Между подходами: 90 с/)).toBeInTheDocument()
-    expect(screen.getByText(/Между упражнениями: 180 с/)).toBeInTheDocument()
-    expect(screen.getByText(/Звук: вкл/)).toBeInTheDocument()
 
     applyCustomRest("45")
     fireEvent.click(screen.getByRole("button", { name: REST_SETTINGS_LABEL }))
 
     expect(settingsToggle()).toHaveAttribute("aria-expanded", "false")
-    expect(screen.getByText(/Между подходами: своё, 45 с/)).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: CUSTOM_REST_LABEL })).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    )
   })
 
   it("opens the panel and focuses the field when «Своё время» is picked", () => {
