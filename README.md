@@ -20,8 +20,6 @@
 
 ## Скриншоты
 
-Мобильный вид в браузере (390 × 844), не съёмка с физического телефона.
-
 <p>
   <img src="docs/screenshots/mobile-overview.png" alt="Главный экран и таймер отдыха" width="280" />
   <img src="docs/screenshots/mobile-exercises.png" alt="Карточки упражнений и отметки подходов" width="280" />
