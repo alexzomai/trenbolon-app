@@ -318,26 +318,34 @@ export function WorkoutSession({ hydrated }: WorkoutSessionProps) {
       </header>
 
       <section aria-label="Общий прогресс" className="mt-3 flex flex-col gap-1.5">
-        <div className="flex items-baseline justify-between gap-3">
-          <p className="flex items-baseline gap-1.5">
-            <span className="text-lg font-semibold tabular-nums" aria-live="polite">
+        {/* Two equal columns with the label under the value: at 360px the set
+            count and the HH:MM:SS clock can no longer squeeze each other into a
+            second line, and both labels sit on one baseline. */}
+        <div className="grid grid-cols-2 items-start gap-x-3">
+          <p className="flex min-w-0 flex-col">
+            <span
+              className="text-lg leading-tight font-semibold whitespace-nowrap tabular-nums"
+              aria-live="polite"
+            >
               {completed} / {total}
             </span>
-            <span className="text-xs text-muted-foreground">подходов</span>
-            <span className="text-xs text-muted-foreground" aria-hidden="true">
-              ·
-            </span>
-            <span className="text-xs text-muted-foreground tabular-nums" aria-hidden="true">
-              {percent}%
+            <span className="text-xs whitespace-nowrap text-muted-foreground">
+              подходов
+              <span aria-hidden="true"> · </span>
+              <span className="tabular-nums" aria-hidden="true">
+                {percent}%
+              </span>
             </span>
           </p>
-          <p className="flex items-baseline gap-1.5">
-            <span className="text-xs text-muted-foreground">{WORKOUT_CLOCK_LABEL}</span>
+          <p className="flex min-w-0 flex-col text-right">
             <span
-              className="text-lg font-semibold tabular-nums"
+              className="text-lg leading-tight font-semibold whitespace-nowrap tabular-nums"
               aria-label={`${WORKOUT_CLOCK_LABEL}: ${elapsed}`}
             >
               {elapsed}
+            </span>
+            <span className="text-xs whitespace-nowrap text-muted-foreground">
+              {WORKOUT_CLOCK_LABEL}
             </span>
           </p>
         </div>

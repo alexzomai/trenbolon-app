@@ -1408,6 +1408,27 @@ describe("the overall workout clock", () => {
     expect(workoutClock()).toHaveTextContent("00:00:00")
   })
 
+  it("keeps the set count and the clock on one line each in two columns", () => {
+    render(<WorkoutTracker />)
+    markSet(1, 1)
+    act(() => {
+      vi.advanceTimersByTime(65_000)
+    })
+
+    const count = screen.getByText("1 / 21")
+    const clock = workoutClock()
+    // Neither value may wrap at 360/390px, so both carry nowrap…
+    expect(count.className).toContain("whitespace-nowrap")
+    expect(clock.className).toContain("whitespace-nowrap")
+    // …and they sit in separate columns of one grid rather than competing for
+    // the width of a single flex row.
+    const summary = count.parentElement!.parentElement!
+    expect(summary).toBe(clock.parentElement!.parentElement!)
+    expect(summary.className).toContain("grid-cols-2")
+    // The percent stays visible next to the compact label.
+    expect(count.parentElement).toHaveTextContent("подходов · 5%")
+  })
+
   it("starts on the first marked set and keeps counting through rests and pauses", () => {
     render(<WorkoutTracker />)
     markSet(1, 1)
@@ -1567,6 +1588,22 @@ describe("the collapsible rest settings panel", () => {
 
     fireEvent.click(settingsToggle())
     expect(settingsToggle()).toHaveAttribute("aria-expanded", "false")
+  })
+
+  it("adds no vertical space below the toggle row while collapsed", () => {
+    render(<WorkoutTracker />)
+
+    // A `hidden` box must not contribute its own top margin…
+    expect(settingsPanel()).toHaveAttribute("hidden")
+    expect(settingsPanel().className).not.toContain("mt-")
+    // …and the silent alarm live region must reserve no height either.
+    const status = document.querySelector('[role="status"][aria-live="assertive"]')!
+    expect(status).toBeEmptyDOMElement()
+    expect(status.className).not.toContain("min-h-")
+    expect(status.className).not.toContain("mt-")
+
+    fireEvent.click(settingsToggle())
+    expect(settingsPanel().className).toContain("mt-3")
   })
 
   it("keeps the applied custom rest selected after the panel is collapsed", () => {

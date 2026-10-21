@@ -314,7 +314,13 @@ export function RestTimer({
         </Button>
       </div>
 
-      <div id={settingsId} hidden={!settingsOpen} className="mt-3 flex flex-col gap-3">
+      {/* Stays mounted when collapsed so drafts survive, but the top margin is
+          only applied when open: a `hidden` box must add no vertical space. */}
+      <div
+        id={settingsId}
+        hidden={!settingsOpen}
+        className={cn("flex flex-col gap-3", settingsOpen && "mt-3")}
+      >
         <SecondsField
           label={CUSTOM_REST_FIELD_LABEL}
           committed={rest.customSeconds}
@@ -357,7 +363,14 @@ export function RestTimer({
         </Button>
       )}
 
-      <p role="status" aria-live="assertive" className="min-h-5 text-center text-sm">
+      {/* Always mounted so the live region can announce, but it reserves no
+          height while silent — otherwise the collapsed card ends in a blank
+          strip below the «Настройки отдыха» row. */}
+      <p
+        role="status"
+        aria-live="assertive"
+        className={cn("text-center text-sm", alarmActive && "mt-2 min-h-5")}
+      >
         {alarmActive && "Сигнал звучит — нажми «Остановить сигнал»."}
       </p>
     </section>
