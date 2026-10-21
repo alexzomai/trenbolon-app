@@ -6,6 +6,7 @@ import { useId } from "react"
 import { Button } from "@/components/ui/button"
 import {
   Card,
+  CardAction,
   CardContent,
   CardHeader,
   CardTitle,
@@ -90,10 +91,10 @@ export function ExerciseCard({
           </span>
           <span className="min-w-0 flex-1 break-words">{exercise.name}</span>
         </CardTitle>
-      </CardHeader>
 
-      <CardContent className="flex flex-col gap-3">
-        <p className="flex flex-wrap items-center gap-x-1.5 text-xs text-muted-foreground tabular-nums">
+        {/* Prescription and progress sit beside the title instead of on their own
+            line below it, which keeps the card shorter. */}
+        <CardAction className="mt-px flex items-center gap-x-1.5 text-xs font-normal whitespace-nowrap text-muted-foreground tabular-nums">
           <span>
             {sets} × {reps.trim() || "—"}
           </span>
@@ -102,8 +103,10 @@ export function ExerciseCard({
             <span className="sr-only">выполнено подходов: </span>
             {done}/{sets}
           </span>
-        </p>
+        </CardAction>
+      </CardHeader>
 
+      <CardContent className="flex flex-col gap-3">
         {/* Weight and reps are hidden for now; the fields stay mounted so their
             state and programmatic value handling keep working unchanged. With
             both of them hidden the row only carries the set-count toggle, so it
