@@ -1322,21 +1322,18 @@ describe("between-set and between-exercise durations", () => {
     expect(screen.getByRole("button", { name: "90 с" })).toHaveAttribute("aria-pressed", "false")
   })
 
-  it("names the countdown, and runs the long rest after the last set of an exercise", () => {
+  it("runs the long rest after the last set of an exercise", () => {
     render(<WorkoutTracker />)
 
     markSet(1, 1)
-    expect(screen.getByText("Между подходами")).toBeInTheDocument()
     expect(timerDisplay()).toHaveTextContent("01:30")
 
     markSet(1, 2)
     markSet(1, 3)
-    expect(screen.getByText("Между упражнениями")).toBeInTheDocument()
     expect(timerDisplay()).toHaveTextContent("03:00")
 
     // The next exercise's first set is a between-set rest again.
     markSet(2, 1)
-    expect(screen.getByText("Между подходами")).toBeInTheDocument()
     expect(timerDisplay()).toHaveTextContent("01:30")
   })
 
@@ -1349,12 +1346,10 @@ describe("between-set and between-exercise durations", () => {
 
     applyExerciseRest("240")
 
-    expect(screen.getByText("Между подходами")).toBeInTheDocument()
     expect(timerDisplay()).toHaveTextContent("01:00")
 
     markSet(1, 2)
     markSet(1, 3)
-    expect(screen.getByText("Между упражнениями")).toBeInTheDocument()
     expect(timerDisplay()).toHaveTextContent("04:00")
   })
 
@@ -1370,11 +1365,9 @@ describe("between-set and between-exercise durations", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "120 с" }))
 
-    expect(screen.getByText("Между упражнениями")).toBeInTheDocument()
     expect(timerDisplay()).toHaveTextContent("02:50")
 
     markSet(2, 1)
-    expect(screen.getByText("Между подходами")).toBeInTheDocument()
     expect(timerDisplay()).toHaveTextContent("02:00")
   })
 

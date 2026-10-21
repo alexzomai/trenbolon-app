@@ -11,7 +11,6 @@ import { cn } from "@/lib/utils"
 import { REST_SECONDS_MESSAGE, parseRestSeconds } from "@/lib/workout-editor"
 import { REST_PRESETS } from "@/lib/workout-plan"
 import {
-  REST_KIND_LABELS,
   TIMER_DISABLED_LABEL,
   TIMER_STATUS_LABELS,
   formatDuration,
@@ -194,10 +193,6 @@ export function RestTimer({
           <Timer aria-hidden="true" className="size-4 shrink-0 translate-y-px text-muted-foreground" />
           Отдых
         </h2>
-        {/* Which countdown this is, so a 03:00 rest is never a mystery. */}
-        <p className="text-[13px] text-muted-foreground" aria-live="polite">
-          {REST_KIND_LABELS[timer.kind]}
-        </p>
         <p className="ml-auto text-[13px] text-muted-foreground" aria-live="polite">
           {timerEnabled ? TIMER_STATUS_LABELS[timer.status] : TIMER_DISABLED_LABEL}
         </p>
