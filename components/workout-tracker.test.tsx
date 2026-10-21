@@ -202,6 +202,26 @@ describe("rendering the plan", () => {
     }
   })
 
+  it("keeps the weight and reps row out of sight while the fields stay mounted", () => {
+    render(<WorkoutTracker />)
+
+    for (const card of screen.getAllByRole("listitem")) {
+      const weight = within(card).getByLabelText(/Вес в кг,/)
+      const reps = within(card).getByLabelText(/Количество повторений,/)
+      // Mounted (so state and programmatic changes are untouched) but invisible.
+      expect(weight).toBeInTheDocument()
+      expect(reps).toBeInTheDocument()
+      expect(weight).not.toBeVisible()
+      expect(reps).not.toBeVisible()
+      expect(within(card).getByText("Вес, кг")).not.toBeVisible()
+      expect(within(card).getByText("Повторения")).not.toBeVisible()
+
+      // The prescription line and the set buttons are unaffected.
+      expect(within(card).getByText(/^3 × /)).toBeVisible()
+      expect(within(card).getByRole("button", { name: /подход 1:/i })).toBeVisible()
+    }
+  })
+
   it("prescribes no weight on the Legs day either", () => {
     render(<WorkoutTracker />)
     switchTo("Ноги")

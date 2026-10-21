@@ -104,8 +104,12 @@ export function ExerciseCard({
           </span>
         </p>
 
-        <div className="flex flex-wrap items-end gap-x-3 gap-y-2">
-          <div className="flex min-w-0 flex-1 basis-24 flex-col gap-1">
+        {/* Weight and reps are hidden for now; the fields stay mounted so their
+            state and programmatic value handling keep working unchanged. With
+            both of them hidden the row only carries the set-count toggle, so it
+            collapses entirely when an exercise has no set options. */}
+        <div className="flex flex-wrap items-end gap-x-3 gap-y-2" hidden={!options}>
+          <div className="flex min-w-0 flex-1 basis-24 flex-col gap-1" hidden>
             <Label htmlFor={weightId} className="text-xs font-normal text-muted-foreground">
               Вес, кг
             </Label>
@@ -120,7 +124,7 @@ export function ExerciseCard({
               className="h-10 w-full min-w-0 border-transparent bg-secondary text-sm"
             />
           </div>
-          <div className="flex min-w-0 flex-1 basis-24 flex-col gap-1">
+          <div className="flex min-w-0 flex-1 basis-24 flex-col gap-1" hidden>
             <Label htmlFor={repsId} className="text-xs font-normal text-muted-foreground">
               Повторения
             </Label>

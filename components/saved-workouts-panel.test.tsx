@@ -146,6 +146,27 @@ describe("create, edit, reload, launch", () => {
     expect(session.soundEnabled).toBe(false)
   })
 
+  it("hides the weight and reps row in a launched custom workout too", () => {
+    seed()
+    render(<WorkoutTracker />)
+    openLibrary()
+    click("Запустить Сохранённая", dialog())
+
+    const [first, second] = screen.getAllByRole("listitem")
+    for (const card of [first, second]) {
+      const weight = within(card).getByLabelText(/Вес в кг,/)
+      expect(weight).toBeInTheDocument()
+      expect(weight).not.toBeVisible()
+      expect(within(card).getByLabelText(/Количество повторений,/)).not.toBeVisible()
+      expect(within(card).getByText("Вес, кг")).not.toBeVisible()
+      expect(within(card).getByText("Повторения")).not.toBeVisible()
+      expect(within(card).getByRole("button", { name: /подход 1:/i })).toBeVisible()
+    }
+    // The set-count toggle shares that row and stays visible where it exists.
+    expect(within(second).getByText("Подходов")).toBeVisible()
+    expect(within(second).getByRole("radio", { name: "3 подхода" })).toBeVisible()
+  })
+
   it("edits an existing workout and keeps exercise ids", () => {
     const saved = seed()
     render(<WorkoutTracker />)
