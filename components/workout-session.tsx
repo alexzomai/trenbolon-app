@@ -1,5 +1,6 @@
 "use client"
 
+import { estimateWorkout } from "@/lib/workout-estimate"
 import { Dumbbell } from "lucide-react"
 import { useCallback, useEffect, useReducer, useRef, useState, useSyncExternalStore } from "react"
 
@@ -117,7 +118,7 @@ export function WorkoutSession({ hydrated }: WorkoutSessionProps) {
   // --- clock --------------------------------------------------------------
   const clockRunning = isClockRunning(state)
   useEffect(() => {
-    if (state.timer.status !== "running" && audioStatus !== "playing" && !clockRunning) return
+    if (!hydrated) return
 
     // `now` is already current whenever a timer starts: every path that starts
     // one sets it from the click handler, and a restored one seeds it above.
@@ -137,7 +138,7 @@ export function WorkoutSession({ hydrated }: WorkoutSessionProps) {
       window.removeEventListener("focus", sync)
       window.removeEventListener("pageshow", sync)
     }
-  }, [state.timer.status, restAudio, audioStatus, clockRunning])
+  }, [state.timer.status, restAudio, audioStatus, clockRunning, hydrated])
 
   const { deadline, status } = state.timer
   useEffect(() => {
@@ -283,6 +284,8 @@ export function WorkoutSession({ hydrated }: WorkoutSessionProps) {
   const remaining = selectRemainingMs(state.timer, now)
   // Absolute-timestamp based, so it survives rests, pauses, a switched-off
   // timer, a background tab and a reload, and freezes on the final set.
+  const estimate = estimateWorkout(state, now)
+  const finishTime = hydrated ? new Date(estimate.finish).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" }) : "--:--"
   const elapsed = formatClock(elapsedMs(state, now))
   // Marks parked beyond the chosen set count: explained in the ⓘ panel, since
   // the cards no longer carry prose.
@@ -349,6 +352,12 @@ export function WorkoutSession({ hydrated }: WorkoutSessionProps) {
             </span>
           </p>
         </div>
+        {!complete && (
+          <p aria-label="Прогноз окончания" className="flex flex-wrap justify-between gap-x-3 text-xs text-muted-foreground tabular-nums">
+            <span>Осталось ≈ {Math.ceil(estimate.remaining / 60000)} мин</span>
+            <span>Финиш ≈ {finishTime}{estimate.paused ? " · после возобновления" : ""}</span>
+          </p>
+        )}
         <Progress
           value={percent}
           aria-label={`Прогресс тренировки: ${percent}%`}
